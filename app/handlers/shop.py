@@ -19,39 +19,64 @@ async def shop_menu(query: CallbackQuery):
     Show shop menu with bear classes.
     """
     try:
-        text = (
-            "🛍️ **Магазин Медведей**\n\n"
-            "Выберите класс медведя:\n\n"
-        )
-        
-        # Add class info with prices
-        for bear_type in ['common', 'rare', 'epic', 'legendary']:
-            class_info = BEAR_CLASSES[bear_type]
-            text += (
-                f"{class_info['color']} **{class_info['rarity']}**\n"
-                f"💰 {class_info['cost']} коинов\n"
-                f"💵 Обмен: {class_info['sell_price']} коинов\n"
-                f"💰 Доход: +{class_info['income_per_hour']:.1f} коин/ч\n\n"
+        async with get_session() as session:
+            # Get user
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            text = (
+                "🛍️ **Магазин Медведей**\n\n"
+                "Выберите класс медведя:\n\n"
             )
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🐻️ Обычные", callback_data="buy_bear:common")],
-            [InlineKeyboardButton(text="🟢 Редкие", callback_data="buy_bear:rare")],
-            [InlineKeyboardButton(text="🟣 Эпические", callback_data="buy_bear:epic")],
-            [InlineKeyboardButton(text="🟡 Легендарные", callback_data="buy_bear:legendary")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
-        ])
-        
-        try:
-            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
-        except Exception as e:
-            logger.warning(f"Could not edit message: {e}, sending new message instead")
-            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
-        
-        await query.answer()
+            
+            # Add class info with prices
+            for bear_type in ['common', 'rare', 'epic', 'legendary']:
+                class_info = BEAR_CLASSES[bear_type]
+                premium_badge = ""
+                if class_info['require_premium']:
+                    premium_badge = " 💳 (Только донат)"
+                text += (
+                    f"{class_info['color']} **{class_info['rarity']}{premium_badge}**\n"
+                    f"💰 {class_info['cost']} коинов\n"
+                    f"💵 Обмен: {class_info['sell_price']} коинов\n"
+                    f"💰 Доход: +{class_info['income_per_hour_base']:.1f} коин/ч (Lv1)\n\n"
+                )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🐻️ Обычные", callback_data="buy_bear:common")],
+                [InlineKeyboardButton(text="🟢 Редкие", callback_data="buy_bear:rare")],
+                [InlineKeyboardButton(text="🟣 Эпические", callback_data="buy_bear:epic")],
+                [
+                    InlineKeyboardButton(
+                        text="🟡 Легендарные",
+                        callback_data="buy_bear:legendary" if user.is_premium else "premium_only"
+                    )
+                ],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception as e:
+                logger.warning(f"Could not edit message: {e}, sending new message instead")
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
     except Exception as e:
         logger.error(f"❌ Error in shop_menu: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "premium_only")
+async def premium_only(query: CallbackQuery):
+    """
+    Show premium required message.
+    """
+    await query.answer(
+        "💳 Легендарные медведи автоматически распределяются в премиум пополнении средств!",
+        show_alert=True
+    )
 
 
 @router.callback_query(F.data.startswith("buy_bear:"))
@@ -75,6 +100,14 @@ async def buy_bear_confirm(query: CallbackQuery):
             class_info = BEAR_CLASSES[bear_type]
             cost = class_info['cost']
             
+            # Check premium for legendary
+            if class_info['require_premium'] and not user.is_premium:
+                await query.answer(
+                    "💳 Легендарные медведи доступны только для премиум пользователей!",
+                    show_alert=True
+                )
+                return
+            
             if user.coins < cost:
                 text = (
                     f"😢 **Недостаточно коинов**\n\n"
@@ -91,8 +124,9 @@ async def buy_bear_confirm(query: CallbackQuery):
                     f"{class_info['emoji']} {class_info['name']}\n"
                     f"💰 Объем: {cost} коинов\n"
                     f"💵 Обмен: {class_info['sell_price']} коинов\n"
-                    f"💰 Доход: +{class_info['income_per_hour']:.1f} коин/ч\n"
-                    f"💰 У вас останется: {user.coins - cost:.0f} коинов"
+                    f"💰 Доход: +{class_info['income_per_hour_base']:.1f} коин/ч (Lv1)\n"
+                    f"💰 У вас останется: {user.coins - cost:.0f} коинов\n\n"
+                    f"📦 Вы получите случайного медведя из 10 вариантов!"
                 )
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [
@@ -134,6 +168,14 @@ async def confirm_buy_bear(query: CallbackQuery):
             class_info = BEAR_CLASSES[bear_type]
             cost = class_info['cost']
             
+            # Check premium for legendary
+            if class_info['require_premium'] and not user.is_premium:
+                await query.answer(
+                    "💳 Легендарные медведи доступны только для премиум пользователей!",
+                    show_alert=True
+                )
+                return
+            
             if user.coins < cost:
                 await query.answer("❌ Недостаточно коинов", show_alert=True)
                 return
@@ -148,6 +190,7 @@ async def confirm_buy_bear(query: CallbackQuery):
                     f"✅ **Медведь куплен!**\n\n"
                     f"{class_info['color']} {class_info['emoji']} {bear.name}\n"
                     f"Класс: {class_info['rarity']}\n"
+                    f"Навариант: {bear.variant}/10\n"
                     f"💰 Осталось: {user.coins:.0f} коинов"
                 )
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
