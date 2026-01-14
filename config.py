@@ -11,7 +11,7 @@ class Settings:
     """Application settings."""
     
     # Telegram Bot
-    BOT_TOKEN: str = os.getenv('BOT_TOKEN')
+    BOT_TOKEN: str = os.getenv('BOT_TOKEN', '')
     ADMIN_ID: int = int(os.getenv('ADMIN_ID', '0'))
     
     # Database
@@ -23,11 +23,11 @@ class Settings:
     
     # Crypto Integration
     TON_API_URL: str = os.getenv('TON_API_URL', 'https://testnet.tonapi.io')
-    TON_WALLET_ADDRESS: str = os.getenv('TON_WALLET_ADDRESS')
-    TON_API_KEY: str = os.getenv('TON_API_KEY')
+    TON_WALLET_ADDRESS: str = os.getenv('TON_WALLET_ADDRESS', '')
+    TON_API_KEY: str = os.getenv('TON_API_KEY', '')
     
     # Payment
-    STRIPE_API_KEY: str = os.getenv('STRIPE_API_KEY')
+    STRIPE_API_KEY: str = os.getenv('STRIPE_API_KEY', '')
     PAYMENT_SYSTEM: str = os.getenv('PAYMENT_SYSTEM', 'stripe')
     
     # App Settings
@@ -41,7 +41,7 @@ class Settings:
     COIN_TO_TON_RATE: float = float(os.getenv('COIN_TO_TON_RATE', '0.001'))
     
     # Channel Task
-    CHANNEL_ID: str = os.getenv('CHANNEL_ID')
+    CHANNEL_ID: str = os.getenv('CHANNEL_ID', '')
     CHANNEL_TASK_REWARD: float = float(os.getenv('CHANNEL_TASK_REWARD', '0.05'))
     
     # Paths
@@ -51,5 +51,11 @@ class Settings:
     
     def __init__(self):
         self.LOG_DIR.mkdir(exist_ok=True)
+        
+        # Проверка обязательных параметров
+        if not self.BOT_TOKEN:
+            raise ValueError("BOT_TOKEN не установлен в .env файле!")
+        if self.ADMIN_ID == 0:
+            print("[⚠️  WARNING] ADMIN_ID установлен как 0. Функции администратора недоступны.")
 
 settings = Settings()
