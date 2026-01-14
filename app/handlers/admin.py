@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, Bear
-from app.services.bears import BearsService, BEAR_CLASSES
+from app.services.bears import BearsService, BEAR_CLASSES, BEAR_NAMES
 from config import settings
 from datetime import datetime, timedelta
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -65,7 +65,7 @@ async def admin_give_vip(message: Message):
     try:
         args = message.text.split()
         if len(args) < 3:
-            await message.answer("⚡ Ю Неверный формат: /admin_give_vip <user_id> <days>")
+            await message.answer("⚡ Неверный формат: /admin_give_vip <user_id> <days>")
             return
         
         user_id = int(args[1])
@@ -330,13 +330,21 @@ async def admin_create_bear(message: Message):
             stats = BearsService.get_bear_stats(bear_type, variant)
             class_info = BEAR_CLASSES[bear_type]
             
+            # Показываем инфо о системе улучшения
+            next_upgrade_cost = BearsService.get_upgrade_cost(1)  # Cost for level 1->2
+            level_2_income = BearsService.get_bear_income_for_level(stats['income'], 2)
+            income_increase = level_2_income - bear.coins_per_hour
+            
             await message.answer(
                 f"✅ Медведь создан:\n"
                 f"{class_info['emoji']} {bear.name}\n"
                 f"Класс: {class_info['rarity']}\n"
                 f"Вариант: {variant}/15\n"
                 f"💰 Доход: {stats['income']:.2f} коин/ч\n"
-                f"Обладатель: {user_id}"
+                f"Обладатель: {user_id}\n\n"
+                f"🔑 **Первое улучшение**:\n"
+                f"💰 Стоимость: {next_upgrade_cost} коинов\n"
+                f"💰 Прибыль: +{income_increase:.2f} коин/ч"
             )
     except ValueError as e:
         logger.error(f"❌ Error: {e}")
