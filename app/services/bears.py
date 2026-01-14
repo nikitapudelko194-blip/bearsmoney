@@ -25,7 +25,7 @@ BEAR_CLASSES = {
     },
     'epic': {
         'name': '🟣 Эпические',
-        'emoji': '🐨',
+        'emoji': '🐼',
         'rarity': 'Эпический',
         'color': '🟣',
         'require_premium': False,
@@ -33,7 +33,7 @@ BEAR_CLASSES = {
     },
     'legendary': {
         'name': '🟡 Легендарные',
-        'emoji': '🐼',
+        'emoji': '🐻‍❄️',
         'rarity': 'Легендарный',
         'color': '🟡',
         'require_premium': True,
@@ -44,7 +44,7 @@ BEAR_CLASSES = {
 BEAR_NAMES = {
     'common': [
         'Мишка', 'Помидор', 'Никита', 'Маркус', 'Гриша',
-        'Данте', 'Голиаф', 'Удалц', 'Нусси', 'Лола',
+        'Данте', 'Голиаф', 'Удалец', 'Нусси', 'Лола',
         'Парти', 'Малис', 'Адам', 'Лев', 'Эмиль',
     ],
     'rare': [
@@ -53,8 +53,8 @@ BEAR_NAMES = {
         'Филипп', 'Эрнест', 'Грегори', 'Андрей', 'Мартин',
     ],
     'epic': [
-        'Копфы', 'Зефир', 'Мефистофель', 'Лорды', 'Нарниан',
-        'Орфей', 'Тэкс', 'Ораль', 'Танатос', 'Посейдон',
+        'Кофы', 'Зефир', 'Мефистофель', 'Лорды', 'Нарниан',
+        'Орфей', 'Тэкс', 'Оральь', 'Танатос', 'Посейдон',
         'Аполлон', 'Артемида', 'Эрос', 'Церера', 'Морфей',
     ],
     'legendary': [
@@ -100,6 +100,37 @@ class BearsService:
         }
     
     @staticmethod
+    def get_upgrade_cost(level: int) -> int:
+        """
+        Calculate upgrade cost for a bear.
+        Exponential growth:
+        Level 1->2: 50 coins
+        Level 2->3: 150 coins (50 * 1.1^(2-1))
+        Level 3->4: 340 coins (50 * 1.1^(3-1))
+        etc.
+        """
+        # Базовая стоимость улучшения
+        base_cost = 50
+        # Коэффициент экспоненциального роста
+        multiplier = 1.1 ** (level - 1)
+        return int(base_cost * multiplier)
+    
+    @staticmethod
+    def get_bear_income_for_level(base_income: float, level: int) -> float:
+        """
+        Calculate income for a given level.
+        Diminishing returns:
+        Level 1: base income
+        Level 2: base income * 1.08
+        Level 3: base income * 1.15
+        Level 4: base income * 1.21
+        etc.
+        Growth slows as level increases.
+        """
+        # Меньший мультипликатор для дохода (8% за уровень вместо 20%)
+        return base_income * (1.08 ** (level - 1))
+    
+    @staticmethod
     async def get_user_bears(session: AsyncSession, user_id: int) -> list[Bear]:
         """
         Get all bears for a user sorted by type and ID.
@@ -118,14 +149,6 @@ class BearsService:
             if bear.id == bear_id:
                 return idx
         return -1
-    
-    @staticmethod
-    def get_bear_income_for_level(base_income: float, level: int) -> float:
-        """
-        Calculate income for a given level.
-        Each level increases income by 20%.
-        """
-        return base_income * (1.2 ** (level - 1))
     
     @staticmethod
     async def create_bear(
@@ -171,7 +194,7 @@ class BearsService:
     async def upgrade_bear(session: AsyncSession, bear_id: int, user_id: int) -> Bear:
         """
         Upgrade a bear to the next level.
-        Cost: 50 * current_level coins.
+        Cost grows exponentially, income grows with diminishing returns.
         Max level: 50
         """
         query = select(Bear).where(Bear.id == bear_id, Bear.owner_id == user_id)
@@ -184,7 +207,7 @@ class BearsService:
         if bear.level >= MAX_BEAR_LEVEL:
             raise ValueError(f"Медведь уже на максимальном уровне ({MAX_BEAR_LEVEL})")
         
-        upgrade_cost = 50 * bear.level
+        upgrade_cost = BearsService.get_upgrade_cost(bear.level)
         user_query = select(User).where(User.id == user_id)
         user_result = await session.execute(user_query)
         user = user_result.scalar_one()
@@ -193,7 +216,6 @@ class BearsService:
             raise ValueError(f"Недостаточно коинов! Нужно {upgrade_cost}, у вас {user.coins:.0f}")
         
         # Upgrade bear
-        bear_class = BEAR_CLASSES[bear.bear_type]
         bear.level += 1
         
         # Get base income for this variant
@@ -252,11 +274,16 @@ class BearsService:
             minutes = (time_left.total_seconds() % 3600) // 60
             boost_info = f"\n🔥 Буст активен: {int(hours)}ч {int(minutes)}м (x{bear.boost_multiplier})"
         
-        # Нужно коинов для следующего уровня
-        upgrade_cost = 50 * bear.level
+        # Стоимость улучшения для следующего уровня
+        next_upgrade_cost = BearsService.get_upgrade_cost(bear.level)
+        next_level_income = BearsService.get_bear_income_for_level(stats['income'], bear.level + 1)
+        income_increase = next_level_income - bear.coins_per_hour
         next_level_info = ""
         if bear.level < MAX_BEAR_LEVEL:
-            next_level_info = f"\n\n⬆️ Улучшить: {upgrade_cost} коинов"
+            next_level_info = (
+                f"\n\n⬆️ Улучшить: {next_upgrade_cost} коинов\n"
+                f"💰 Доход увеличится: +{income_increase:.2f} коин/ч"
+            )
         else:
             next_level_info = f"\n\n🌟 Максимальный уровень!"
         
@@ -266,8 +293,8 @@ class BearsService:
             f"Вариант: {bear.variant}/15\n"
             f"Уровень: {bear.level}/{MAX_BEAR_LEVEL}\n"
             f"💰 Основной доход: {stats['income']:.1f} коин/ч\n"
-            f"💰 Текущий доход: {bear.coins_per_hour:.1f} коинов/час\n"
-            f"📅 Доход в день: {bear.coins_per_day:.1f} коинов\n"
+            f"💰 Текущий доход: {bear.coins_per_hour:.2f} коин/ч\n"
+            f"📅 Доход в день: {bear.coins_per_day:.2f} коин\n"
             f"Можно обменять на: {stats['sell']} коинов\n"
             f"Куплен: {bear.purchased_at.strftime('%d.%m.%Y')}"
             f"{next_level_info}"
@@ -285,7 +312,7 @@ class BearsService:
         return (
             f"{bear_class['color']} **№{bear_number}** {bear_class['emoji']} {bear.name}\n"
             f"Вариант: {bear.variant}/15 | Уровень: {bear.level}/{MAX_BEAR_LEVEL} | "
-            f"Доход: {bear.coins_per_hour:.1f}/ч | Обмен: {stats['sell']}"
+            f"Доход: {bear.coins_per_hour:.2f}/ч | Обмен: {stats['sell']}"
         )
     
     @staticmethod
