@@ -11,14 +11,14 @@ CASE_TYPES = {
     'common': {
         'name': '📋 Обычный ящик',
         'emoji': '📋',
-        'cost_coins': 1000,
+        'cost_coins': 200,
         'cost_ton': 0,
         'description': 'Низкие шансы на медведей',
     },
     'rare': {
         'name': '📦 Редкий ящик',
         'emoji': '📦',
-        'cost_coins': 5000,
+        'cost_coins': 1000,
         'cost_ton': 0,
         'description': 'Лучшие шансы, всё щё',
     },
@@ -39,38 +39,44 @@ CASE_TYPES = {
 }
 
 # Loot table for common cases (coins)
+# REDUCED COSTS: 200 coins
 COMMON_CASE_LOOT = [
     # (reward_type, reward_value, rarity, weight)
     # Coins are most common
-    ('coins', 500, 'common', 400),
-    ('coins', 1000, 'common', 300),
-    ('coins', 2000, 'common', 200),
+    ('coins', 100, 'common', 400),
+    ('coins', 200, 'common', 300),
+    ('coins', 300, 'common', 200),
     ('empty', 0, 'empty', 500),  # Empty is also very common
     # Rare coins
-    ('coins', 5000, 'rare', 50),
+    ('coins', 500, 'rare', 30),
+    # TON (very rare)
+    ('ton', 0.1, 'legendary', 5),
     # Common bears
-    ('bear', 'common:1', 'common', 30),
-    ('bear', 'common:3', 'common', 25),
-    ('bear', 'common:5', 'common', 15),
+    ('bear', 'common:1', 'common', 20),
+    ('bear', 'common:3', 'common', 15),
+    ('bear', 'common:5', 'common', 10),
     # Rare bears (rare)
-    ('bear', 'rare:1', 'rare', 10),
-    ('bear', 'rare:2', 'rare', 8),
+    ('bear', 'rare:1', 'rare', 5),
 ]
 
 # Loot table for rare cases (coins)
+# REDUCED COSTS: 1000 coins
 RARE_CASE_LOOT = [
     # More coins
-    ('coins', 2000, 'common', 300),
-    ('coins', 5000, 'common', 250),
-    ('coins', 10000, 'rare', 150),
-    ('coins', 20000, 'rare', 100),
+    ('coins', 500, 'common', 300),
+    ('coins', 1000, 'common', 250),
+    ('coins', 2000, 'rare', 150),
+    ('coins', 3000, 'rare', 100),
     ('empty', 0, 'empty', 400),  # Still common
+    # TON (very rare)
+    ('ton', 0.1, 'legendary', 8),
+    ('ton', 0.5, 'legendary', 3),
     # More bears
-    ('bear', 'common:5', 'common', 50),
-    ('bear', 'common:10', 'common', 40),
-    ('bear', 'rare:3', 'rare', 35),
-    ('bear', 'rare:5', 'rare', 25),
-    ('bear', 'rare:8', 'rare', 15),
+    ('bear', 'common:5', 'common', 40),
+    ('bear', 'common:10', 'common', 30),
+    ('bear', 'rare:3', 'rare', 25),
+    ('bear', 'rare:5', 'rare', 15),
+    ('bear', 'rare:8', 'rare', 10),
 ]
 
 # Loot table for epic cases (TON)
