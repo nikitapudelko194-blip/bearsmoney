@@ -27,28 +27,27 @@ CASE_TYPES = {
         'emoji': '🔥',
         'cost_coins': 0,
         'cost_ton': 1.0,
-        'description': 'ТОН: Эпические и легендарные медведи',
+        'description': 'ТОН: Коины, Эпические и Легендарные медведи',
     },
     'legendary': {
         'name': '🌟 Легендарный ящик',
         'emoji': '🌟',
         'cost_coins': 0,
         'cost_ton': 5.0,
-        'description': 'ТОН: Очень большие награды',
+        'description': 'ТОН: Коины, Легендарные медведи',
     },
 }
 
 # Loot table for common cases (coins)
-# REDUCED COSTS: 200 coins
+# COST: 200 coins - rewards UP TO 300 coins (not 500!)
 COMMON_CASE_LOOT = [
     # (reward_type, reward_value, rarity, weight)
-    # Coins are most common
-    ('coins', 100, 'common', 400),
-    ('coins', 200, 'common', 300),
-    ('coins', 300, 'common', 200),
+    # Coins are most common - REDUCED MAX
+    ('coins', 50, 'common', 400),
+    ('coins', 100, 'common', 300),
+    ('coins', 200, 'common', 200),
+    ('coins', 300, 'common', 100),
     ('empty', 0, 'empty', 500),  # Empty is also very common
-    # Rare coins
-    ('coins', 500, 'rare', 30),
     # TON (very rare)
     ('ton', 0.1, 'legendary', 5),
     # Common bears
@@ -60,7 +59,7 @@ COMMON_CASE_LOOT = [
 ]
 
 # Loot table for rare cases (coins)
-# REDUCED COSTS: 1000 coins
+# COST: 1000 coins
 RARE_CASE_LOOT = [
     # More coins
     ('coins', 500, 'common', 300),
@@ -79,13 +78,16 @@ RARE_CASE_LOOT = [
     ('bear', 'rare:8', 'rare', 10),
 ]
 
-# Loot table for epic cases (TON) - REDUCED REWARDS
+# Loot table for epic cases (TON) - NOW WITH COINS AND BEARS
 EPIC_CASE_LOOT = [
-    # TON rewards - reduced from 2-10 to 0.1-1
-    ('ton', 0.1, 'common', 300),
-    ('ton', 0.5, 'common', 200),
-    ('ton', 1.0, 'rare', 100),
+    # TON rewards
+    ('ton', 0.1, 'common', 250),
+    ('ton', 0.5, 'common', 150),
+    ('ton', 1.0, 'rare', 80),
     ('empty', 0, 'empty', 350),  # More pity
+    # COINS (new!)
+    ('coins', 5000, 'rare', 150),
+    ('coins', 10000, 'epic', 80),
     # Epic bears
     ('bear', 'epic:1', 'epic', 80),
     ('bear', 'epic:3', 'epic', 70),
@@ -96,19 +98,31 @@ EPIC_CASE_LOOT = [
     ('bear', 'legendary:3', 'legendary', 15),
 ]
 
-# Loot table for legendary cases (TON) - REDUCED REWARDS
+# Loot table for legendary cases (TON) - NOW WITH COINS AND BETTER BEARS
 LEGENDARY_CASE_LOOT = [
-    # Large TON rewards - reduced from 10-50 to 1-2
-    ('ton', 1.0, 'rare', 250),
-    ('ton', 2.0, 'epic', 150),
+    # TON rewards
+    ('ton', 1.0, 'rare', 200),
+    ('ton', 2.0, 'epic', 120),
     ('empty', 0, 'empty', 250),  # More pity
-    # Many legendary bears
-    ('bear', 'legendary:2', 'legendary', 100),
-    ('bear', 'legendary:5', 'legendary', 90),
+    # COINS (new!) - large amounts
+    ('coins', 20000, 'epic', 150),
+    ('coins', 50000, 'legendary', 80),
+    # Many legendary bears - ALL VARIANTS
+    ('bear', 'legendary:1', 'legendary', 70),
+    ('bear', 'legendary:2', 'legendary', 80),
+    ('bear', 'legendary:3', 'legendary', 75),
+    ('bear', 'legendary:4', 'legendary', 70),
+    ('bear', 'legendary:5', 'legendary', 80),
+    ('bear', 'legendary:6', 'legendary', 70),
+    ('bear', 'legendary:7', 'legendary', 65),
     ('bear', 'legendary:8', 'legendary', 80),
-    ('bear', 'legendary:10', 'legendary', 70),
-    ('bear', 'legendary:12', 'legendary', 50),
-    ('bear', 'legendary:15', 'legendary', 30),
+    ('bear', 'legendary:9', 'legendary', 70),
+    ('bear', 'legendary:10', 'legendary', 75),
+    ('bear', 'legendary:11', 'legendary', 70),
+    ('bear', 'legendary:12', 'legendary', 65),
+    ('bear', 'legendary:13', 'legendary', 60),
+    ('bear', 'legendary:14', 'legendary', 55),
+    ('bear', 'legendary:15', 'legendary', 50),
 ]
 
 LOOT_TABLES = {
@@ -198,7 +212,7 @@ class CasesService:
             # TODO: Add TON to user wallet
             result['reward_message'] = f"💵 ТОН: +{reward_value:.2f}"
         elif reward_type == 'bear':
-            # Parse bear info (e.g., 'rare:5')
+            # Parse bear info (e.g., 'rare:5' or 'legendary:10')
             bear_type, variant = reward_value.split(':')
             variant = int(variant)
             bear = await BearsService.create_bear(session, user.id, bear_type, variant=variant)
