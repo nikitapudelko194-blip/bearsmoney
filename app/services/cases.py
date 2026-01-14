@@ -39,14 +39,14 @@ CASE_TYPES = {
 }
 
 # Loot table for common cases (coins)
-# COST: 200 coins - rewards UP TO 300 coins (not 500!)
+# COST: 200 coins - rewards UP TO 500 coins (UPDATED!)
 COMMON_CASE_LOOT = [
     # (reward_type, reward_value, rarity, weight)
-    # Coins are most common - REDUCED MAX
-    ('coins', 50, 'common', 400),
-    ('coins', 100, 'common', 300),
-    ('coins', 200, 'common', 200),
-    ('coins', 300, 'common', 100),
+    # Coins are most common
+    ('coins', 100, 'common', 400),
+    ('coins', 200, 'common', 300),
+    ('coins', 300, 'common', 200),
+    ('coins', 500, 'common', 100),
     ('empty', 0, 'empty', 500),  # Empty is also very common
     # TON (very rare)
     ('ton', 0.1, 'legendary', 5),
@@ -98,15 +98,15 @@ EPIC_CASE_LOOT = [
     ('bear', 'legendary:3', 'legendary', 15),
 ]
 
-# Loot table for legendary cases (TON) - NOW WITH COINS AND BETTER BEARS
+# Loot table for legendary cases (TON) - UPDATED COINS
 LEGENDARY_CASE_LOOT = [
     # TON rewards
     ('ton', 1.0, 'rare', 200),
     ('ton', 2.0, 'epic', 120),
     ('empty', 0, 'empty', 250),  # More pity
-    # COINS (new!) - large amounts
-    ('coins', 20000, 'epic', 150),
-    ('coins', 50000, 'legendary', 80),
+    # COINS (UPDATED!) - 10000 and 20000
+    ('coins', 10000, 'epic', 150),
+    ('coins', 20000, 'epic', 80),
     # Many legendary bears - ALL VARIANTS
     ('bear', 'legendary:1', 'legendary', 70),
     ('bear', 'legendary:2', 'legendary', 80),
