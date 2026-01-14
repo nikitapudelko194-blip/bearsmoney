@@ -1,5 +1,6 @@
 """Database connection and session management."""
 import logging
+from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from config import settings
 from app.database.models import Base
@@ -26,20 +27,42 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+@asynccontextmanager
 async def get_session() -> AsyncSession:
-    """Get database session."""
+    """
+    Get database session as async context manager.
+    Usage: async with get_session() as session:
+    """
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"❌ Database error: {e}")
+            raise
+        finally:
+            await session.close()
 
 
 async def init_db():
-    """Initialize database - create all tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database initialized successfully")
+    """
+    Initialize database - create all tables.
+    """
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("✅ Database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Error initializing database: {e}")
+        raise
 
 
 async def close_db():
-    """Close database connection."""
-    await engine.dispose()
-    logger.info("Database connection closed")
+    """
+    Close database connection.
+    """
+    try:
+        await engine.dispose()
+        logger.info("✅ Database connection closed")
+    except Exception as e:
+        logger.error(f"❌ Error closing database: {e}")
