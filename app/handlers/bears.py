@@ -18,7 +18,7 @@ router = Router()
 @router.callback_query(F.data == "bears")
 async def bears_list(query: CallbackQuery):
     """
-    Show list of user's bears.
+    Show list of user's bears with classification.
     """
     try:
         async with get_session() as session:
@@ -43,18 +43,29 @@ async def bears_list(query: CallbackQuery):
             else:
                 text = f"🐻 **Мои медведи** ({len(bears)})\n\n"
                 
-                for i, bear in enumerate(bears, 1):
-                    text += f"\n**{i}. {bear.name}**\n"
-                    text += f"Тип: `{bear.bear_type}`\n"
-                    text += f"Уровень: `{bear.level}`\n"
-                    text += f"Доход: `{bear.coins_per_hour:.1f}` коинов/час\n"
+                # Group bears by type for display
+                bears_by_type = {}
+                for idx, bear in enumerate(bears, 1):
+                    if bear.bear_type not in bears_by_type:
+                        bears_by_type[bear.bear_type] = []
+                    bears_by_type[bear.bear_type].append((idx, bear))
+                
+                # Display bears grouped by type
+                type_order = ['common', 'rare', 'epic', 'legendary']
+                for bear_type in type_order:
+                    if bear_type in bears_by_type:
+                        class_info = BearsService.get_bear_class_info(bear_type)
+                        text += f"\n{class_info['color']} **{class_info['rarity']}**\n"
+                        for bear_num, bear in bears_by_type[bear_type]:
+                            text += f"№{bear_num}. {bear.name} (Lv{bear.level})\n"
                 
                 # Create keyboard with bear buttons
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[])
-                for i, bear in enumerate(bears):
+                for idx, bear in enumerate(bears, 1):
+                    bear_card = await BearsService.format_bear_card(bear, idx)
                     keyboard.inline_keyboard.append([
                         InlineKeyboardButton(
-                            text=f"🐻 {bear.name[:15]}",
+                            text=f"№{idx}",
                             callback_data=f"bear_detail:{bear.id}"
                         )
                     ])
@@ -95,7 +106,14 @@ async def bear_detail(query: CallbackQuery):
                 await query.answer("❌ Медведь не найден")
                 return
             
-            text = await BearsService.format_bear_info(bear, user)
+            # Get bear number
+            bear_num = await BearsService.get_bear_number(session, bear_id, user.id)
+            
+            # Format header with number
+            class_info = BearsService.get_bear_class_info(bear.bear_type)
+            text = f"{class_info['color']} **№{bear_num}. {bear.name}**\n"
+            text += f"{class_info['emoji']} {class_info['rarity']}\n\n"
+            text += await BearsService.format_bear_info(bear, user)
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
@@ -170,7 +188,15 @@ async def sell_bear(query: CallbackQuery):
                 await query.answer("❌ Медведь не найден")
                 return
             
-            text = f"📋 Вы уверены что хотите продать {bear.name}?\nПолучите: 50 коинов"
+            # Get bear number
+            bear_num = await BearsService.get_bear_number(session, bear_id, user.id)
+            class_info = BearsService.get_bear_class_info(bear.bear_type)
+            
+            text = (
+                f"📋 Вы уверены что хотите продать?\n\n"
+                f"{class_info['color']} **№{bear_num}. {bear.name}** ({class_info['rarity']})\n"
+                f"Получите: {class_info['sell_price']} коинов"
+            )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
@@ -180,10 +206,10 @@ async def sell_bear(query: CallbackQuery):
             ])
             
             try:
-                await query.message.edit_text(text, reply_markup=keyboard)
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
             except Exception as e:
                 logger.warning(f"Could not edit message: {e}, sending new message instead")
-                await query.message.answer(text, reply_markup=keyboard)
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
             
             await query.answer()
     except Exception as e:
