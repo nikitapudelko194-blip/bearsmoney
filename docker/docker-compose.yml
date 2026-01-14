@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: bearsmoney_db
+    environment:
+      POSTGRES_USER: bearsmoney
+      POSTGRES_PASSWORD: bearsmoney_pwd
+      POSTGRES_DB: bearsmoney
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bearsmoney"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bearsmoney_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: bearsmoney_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bearsmoney_network
+
+  # BearsMoney Bot
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: bearsmoney_bot
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      ADMIN_ID: ${ADMIN_ID}
+      DATABASE_URL: postgresql+asyncpg://bearsmoney:bearsmoney_pwd@postgres:5432/bearsmoney
+      REDIS_URL: redis://redis:6379
+      TON_API_URL: ${TON_API_URL}
+      TON_API_KEY: ${TON_API_KEY}
+      DEBUG: ${DEBUG:-False}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./logs:/app/logs
+      - ./..:/app
+    networks:
+      - bearsmoney_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  bearsmoney_network:
+    driver: bridge
