@@ -14,6 +14,7 @@ BEAR_CLASSES = {
         'color': '⚪',
         'require_premium': False,
         'variants': 15,
+        'upgrade_multiplier': 1.0,  # Base cost multiplier
     },
     'rare': {
         'name': '🟢 Редкие',
@@ -22,6 +23,7 @@ BEAR_CLASSES = {
         'color': '🟢',
         'require_premium': False,
         'variants': 15,
+        'upgrade_multiplier': 3.0,  # 3x more expensive
     },
     'epic': {
         'name': '🟣 Эпические',
@@ -30,6 +32,7 @@ BEAR_CLASSES = {
         'color': '🟣',
         'require_premium': False,
         'variants': 15,
+        'upgrade_multiplier': 10.0,  # 10x more expensive
     },
     'legendary': {
         'name': '🟡 Легендарные',
@@ -38,6 +41,7 @@ BEAR_CLASSES = {
         'color': '🟡',
         'require_premium': True,
         'variants': 15,
+        'upgrade_multiplier': 30.0,  # 30x more expensive
     },
 }
 
@@ -101,20 +105,27 @@ class BearsService:
         }
     
     @staticmethod
-    def get_upgrade_cost(level: int) -> int:
+    def get_upgrade_cost(bear_type: str, level: int) -> int:
         """
-        Calculate upgrade cost for a bear.
-        HARDER ECONOMY: Exponential growth with higher base and multiplier.
-        Level 1->2: 500 coins (was 50)
-        Level 2->3: 550 coins (was 55)
-        Level 3->4: 605 coins (was 60.5)
-        etc.
+        Calculate upgrade cost for a bear based on its class.
+        Cost depends on both level AND bear rarity class.
+        
+        Common:    Level 1->2: 500 coins
+        Rare:      Level 1->2: 1500 coins (3x)
+        Epic:      Level 1->2: 5000 coins (10x)
+        Legendary: Level 1->2: 15000 coins (30x)
         """
-        # Базовая стоимость улучшения (10x выше)
+        # Базовая стоимость улучшения
         base_cost = 500
-        # Коэффициент экспоненциального роста (выше, чем раньше)
-        multiplier = 1.15 ** (level - 1)  # Was 1.1
-        return int(base_cost * multiplier)
+        
+        # Коэффициент по классу редкости
+        bear_class = BEAR_CLASSES.get(bear_type, BEAR_CLASSES['common'])
+        class_multiplier = bear_class['upgrade_multiplier']
+        
+        # Экспоненциальный рост с уровнем
+        level_multiplier = 1.15 ** (level - 1)
+        
+        return int(base_cost * class_multiplier * level_multiplier)
     
     @staticmethod
     def get_bear_income_for_level(base_income: float, level: int) -> float:
@@ -194,7 +205,8 @@ class BearsService:
     async def upgrade_bear(session: AsyncSession, bear_id: int, user_id: int) -> Bear:
         """
         Upgrade a bear to the next level.
-        Cost grows exponentially, income grows with diminishing returns.
+        Cost grows exponentially AND depends on bear class.
+        Income grows with diminishing returns.
         Max level: 50
         """
         query = select(Bear).where(Bear.id == bear_id, Bear.owner_id == user_id)
@@ -207,7 +219,8 @@ class BearsService:
         if bear.level >= MAX_BEAR_LEVEL:
             raise ValueError(f"Медведь уже на максимальном уровне ({MAX_BEAR_LEVEL})")
         
-        upgrade_cost = BearsService.get_upgrade_cost(bear.level)
+        # Get upgrade cost based on bear class and level
+        upgrade_cost = BearsService.get_upgrade_cost(bear.bear_type, bear.level)
         user_query = select(User).where(User.id == user_id)
         user_result = await session.execute(user_query)
         user = user_result.scalar_one()
@@ -274,8 +287,8 @@ class BearsService:
             minutes = (time_left.total_seconds() % 3600) // 60
             boost_info = f"\n🔥 Буст активен: {int(hours)}ч {int(minutes)}м (x{bear.boost_multiplier})"
         
-        # Стоимость улучшения для следующего уровня
-        next_upgrade_cost = BearsService.get_upgrade_cost(bear.level)
+        # Стоимость улучшения для следующего уровня (зависит от класса!)
+        next_upgrade_cost = BearsService.get_upgrade_cost(bear.bear_type, bear.level)
         next_level_income = BearsService.get_bear_income_for_level(stats['income'], bear.level + 1)
         income_increase = next_level_income - bear.coins_per_hour
         next_level_info = ""
