@@ -5,51 +5,39 @@ from app.database.models import Bear, User
 from datetime import datetime, timedelta
 import random
 
-# Bear classification system with 10 variants per rarity class
+# Bear classification system with 15 variants per rarity class
 BEAR_CLASSES = {
     'common': {
         'name': '🐻 Обычные',
         'emoji': '🐻️',
-        'cost': 100,
-        'income_per_hour_base': 1.0,
         'rarity': 'Обычный',
-        'color': '⚪',  # Белый
-        'sell_price': 50,  # 50% от стоимости
+        'color': '⚪',
         'require_premium': False,
-        'variants': 10,  # 10 различных медведей
+        'variants': 15,
     },
     'rare': {
         'name': '🟢 Редкие',
         'emoji': '🐻',
-        'cost': 500,
-        'income_per_hour_base': 3.0,
         'rarity': 'Редкий',
-        'color': '🟢',  # Зелёный
-        'sell_price': 250,
+        'color': '🟢',
         'require_premium': False,
-        'variants': 10,
+        'variants': 15,
     },
     'epic': {
         'name': '🟣 Эпические',
         'emoji': '🐨',
-        'cost': 2000,
-        'income_per_hour_base': 8.0,
         'rarity': 'Эпический',
-        'color': '🟣',  # Фиолетовый
-        'sell_price': 1000,
+        'color': '🟣',
         'require_premium': False,
-        'variants': 10,
+        'variants': 15,
     },
     'legendary': {
         'name': '🟡 Легендарные',
         'emoji': '🐼',
-        'cost': 10000,
-        'income_per_hour_base': 20.0,
         'rarity': 'Легендарный',
-        'color': '🟡',  # Жёлтый
-        'sell_price': 5000,
-        'require_premium': True,  # Только за донат
-        'variants': 10,
+        'color': '🟡',
+        'require_premium': True,
+        'variants': 15,
     },
 }
 
@@ -57,26 +45,59 @@ BEAR_NAMES = {
     'common': [
         'Мишка', 'Помидор', 'Никита', 'Маркус', 'Гриша',
         'Данте', 'Голиаф', 'Удалц', 'Нусси', 'Лола',
+        'Парти', 'Малис', 'Адам', 'Лев', 'Эмиль',
     ],
     'rare': [
         'Конрад', 'Макс', 'Павел', 'Антон', 'Патрик',
         'Виктор', 'Леонард', 'Костя', 'Денис', 'Тим',
+        'Филипп', 'Эрнест', 'Грегори', 'Андрей', 'Мартин',
     ],
     'epic': [
         'Копфы', 'Зефир', 'Мефистофель', 'Лорды', 'Нарниан',
         'Орфей', 'Тэкс', 'Ораль', 'Танатос', 'Посейдон',
+        'Аполлон', 'Артемида', 'Эрос', 'Церера', 'Морфей',
     ],
     'legendary': [
         'Один', 'Тор', 'Локи', 'Окулт', 'Небуло',
         'Галилей', 'Невроз', 'Мевала', 'Ментор', 'Титан',
+        'Атлас', 'Прометей', 'Геракл', 'Эол', 'Арес',
     ],
 }
 
-MAX_BEAR_LEVEL = 50  # Максимальный уровень
+MAX_BEAR_LEVEL = 50
 
 
 class BearsService:
     """Service for managing bears."""
+    
+    @staticmethod
+    def get_bear_stats(bear_type: str, variant: int) -> dict:
+        """
+        Get bear stats for a specific variant.
+        Each variant is 5% more expensive and generates 5% more income.
+        """
+        base_stats = {
+            'common': {'cost': 100, 'income': 1.0, 'sell': 50},
+            'rare': {'cost': 500, 'income': 3.0, 'sell': 250},
+            'epic': {'cost': 2000, 'income': 8.0, 'sell': 1000},
+            'legendary': {'cost': 10000, 'income': 20.0, 'sell': 5000},
+        }
+        
+        if bear_type not in base_stats:
+            raise ValueError(f"Invalid bear type: {bear_type}")
+        
+        if not 1 <= variant <= 15:
+            raise ValueError(f"Invalid variant: {variant}")
+        
+        base = base_stats[bear_type]
+        # Каждый вариант на 5% дороже и доходнее
+        multiplier = 1.05 ** (variant - 1)
+        
+        return {
+            'cost': int(base['cost'] * multiplier),
+            'income': base['income'] * multiplier,
+            'sell': int(base['sell'] * multiplier),
+        }
     
     @staticmethod
     async def get_user_bears(session: AsyncSession, user_id: int) -> list[Bear]:
@@ -116,27 +137,23 @@ class BearsService:
     ) -> Bear:
         """
         Create a new bear for user.
-        Variant: 1-10 для каждого класса.
+        Variant: 1-15 для каждого класса.
         """
         if bear_type not in BEAR_CLASSES:
             raise ValueError(f"Invalid bear type: {bear_type}")
         
-        bear_info = BEAR_CLASSES[bear_type]
-        
         # Если вариант не указан, выбираем случайный
         if variant is None:
-            variant = random.randint(1, bear_info['variants'])
+            variant = random.randint(1, 15)
         else:
-            if not 1 <= variant <= bear_info['variants']:
+            if not 1 <= variant <= 15:
                 raise ValueError(f"Invalid variant: {variant}")
         
         bear_names = BEAR_NAMES[bear_type]
-        bear_name = bear_names[variant - 1]  # Каждые 10 медведей разные
+        bear_name = bear_names[variant - 1]
         
-        income_per_hour = BearsService.get_bear_income_for_level(
-            bear_info['income_per_hour_base'], 
-            1  # Начинаем с 1 уровня
-        )
+        stats = BearsService.get_bear_stats(bear_type, variant)
+        income_per_hour = BearsService.get_bear_income_for_level(stats['income'], 1)
         
         bear = Bear(
             owner_id=user_id,
@@ -176,14 +193,12 @@ class BearsService:
             raise ValueError(f"Недостаточно коинов! Нужно {upgrade_cost}, у вас {user.coins:.0f}")
         
         # Upgrade bear
-        bear_info = BEAR_CLASSES[bear.bear_type]
+        bear_class = BEAR_CLASSES[bear.bear_type]
         bear.level += 1
         
-        # Новые доходы для нового уровня
-        new_income = BearsService.get_bear_income_for_level(
-            bear_info['income_per_hour_base'],
-            bear.level
-        )
+        # Get base income for this variant
+        stats = BearsService.get_bear_stats(bear.bear_type, bear.variant)
+        new_income = BearsService.get_bear_income_for_level(stats['income'], bear.level)
         bear.coins_per_hour = new_income
         bear.coins_per_day = new_income * 24
         user.coins -= upgrade_cost
@@ -228,6 +243,7 @@ class BearsService:
         Format bear info for display.
         """
         bear_class = BEAR_CLASSES.get(bear.bear_type, BEAR_CLASSES['common'])
+        stats = BearsService.get_bear_stats(bear.bear_type, bear.variant)
         boost_info = ""
         
         if bear.boost_until and bear.boost_until > datetime.utcnow():
@@ -247,10 +263,12 @@ class BearsService:
         return (
             f"{bear_class['emoji']} **{bear.name}**\n"
             f"Класс: {bear_class['name']}\n"
+            f"Вариант: {bear.variant}/15\n"
             f"Уровень: {bear.level}/{MAX_BEAR_LEVEL}\n"
-            f"Доход: {bear.coins_per_hour:.1f} коинов/час\n"
-            f"Доход в день: {bear.coins_per_day:.1f} коинов\n"
-            f"Можно обменять на: {bear_class['sell_price']} коинов\n"
+            f"💰 Основной доход: {stats['income']:.1f} коин/ч\n"
+            f"💰 Текущий доход: {bear.coins_per_hour:.1f} коинов/час\n"
+            f"📅 Доход в день: {bear.coins_per_day:.1f} коинов\n"
+            f"Можно обменять на: {stats['sell']} коинов\n"
             f"Куплен: {bear.purchased_at.strftime('%d.%m.%Y')}"
             f"{next_level_info}"
             f"{boost_info}"
@@ -262,12 +280,12 @@ class BearsService:
         Format bear card for display in list (brief info).
         """
         bear_class = BEAR_CLASSES.get(bear.bear_type, BEAR_CLASSES['common'])
+        stats = BearsService.get_bear_stats(bear.bear_type, bear.variant)
         
         return (
             f"{bear_class['color']} **№{bear_number}** {bear_class['emoji']} {bear.name}\n"
-            f"Уровень: {bear.level}/{MAX_BEAR_LEVEL} | "
-            f"Доход: {bear.coins_per_hour:.1f}/ч | "
-            f"Обмен: {bear_class['sell_price']}"
+            f"Вариант: {bear.variant}/15 | Уровень: {bear.level}/{MAX_BEAR_LEVEL} | "
+            f"Доход: {bear.coins_per_hour:.1f}/ч | Обмен: {stats['sell']}"
         )
     
     @staticmethod
@@ -282,8 +300,8 @@ class BearsService:
         if not bear:
             raise ValueError("Медведь не найден")
         
-        bear_class = BEAR_CLASSES.get(bear.bear_type, BEAR_CLASSES['common'])
-        refund = bear_class['sell_price']
+        stats = BearsService.get_bear_stats(bear.bear_type, bear.variant)
+        refund = stats['sell']
         
         # Update user coins
         user_query = select(User).where(User.id == user_id)
