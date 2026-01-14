@@ -31,12 +31,14 @@ async def bears_list(query: CallbackQuery):
             bears = await BearsService.get_user_bears(session, user.id)
             
             if not bears:
-                text = "🐻 **Мои медведи**\n\n"
-                text += "На вас нет медведей! 😢\n"
-                text += "Перейдите в магазин чтобы купить первого медведя!"
+                text = (
+                    "🐻 **Мои медведи**\n\n"
+                    "На вас нет медведей! 😢\n"
+                    "Перейдите в магазин чтобы купить первого медведя!"
+                )
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🛍️ Магазин", callback_data="shop")],
-                    [InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
                 ])
             else:
                 text = f"🐻 **Мои медведи** ({len(bears)})\n\n"
@@ -56,9 +58,15 @@ async def bears_list(query: CallbackQuery):
                             callback_data=f"bear_detail:{bear.id}"
                         )
                     ])
-                keyboard.inline_keyboard.append([InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")])
+                keyboard.inline_keyboard.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")])
             
-            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            # Try to edit message, if fails - send new message
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception as e:
+                logger.warning(f"Could not edit message: {e}, sending new message instead")
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
             await query.answer()
     except Exception as e:
         logger.error(f"❌ Error in bears_list: {e}", exc_info=True)
@@ -95,15 +103,20 @@ async def bear_detail(query: CallbackQuery):
                     InlineKeyboardButton(text="🔥 Буст", callback_data=f"boost_bear:{bear_id}"),
                 ],
                 [
-                    InlineKeyboardButton(text="🗂️ Переименовать", callback_data=f"rename_bear:{bear_id}"),
+                    InlineKeyboardButton(text="📝 Переименовать", callback_data=f"rename_bear:{bear_id}"),
                     InlineKeyboardButton(text="💵 Продать", callback_data=f"sell_bear:{bear_id}"),
                 ],
                 [
-                    InlineKeyboardButton(text="◀️ Назад", callback_data="bears"),
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="bears"),
                 ],
             ])
             
-            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception as e:
+                logger.warning(f"Could not edit message: {e}, sending new message instead")
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
             await query.answer()
     except Exception as e:
         logger.error(f"❌ Error in bear_detail: {e}", exc_info=True)
@@ -157,8 +170,7 @@ async def sell_bear(query: CallbackQuery):
                 await query.answer("❌ Медведь не найден")
                 return
             
-            text = f"📄 Вы уверены что хотите продать {bear.name}?\n"
-            text += f"Получите: 50 коинов"
+            text = f"📋 Вы уверены что хотите продать {bear.name}?\nПолучите: 50 коинов"
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
@@ -167,7 +179,12 @@ async def sell_bear(query: CallbackQuery):
                 ],
             ])
             
-            await query.message.edit_text(text, reply_markup=keyboard)
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard)
+            except Exception as e:
+                logger.warning(f"Could not edit message: {e}, sending new message instead")
+                await query.message.answer(text, reply_markup=keyboard)
+            
             await query.answer()
     except Exception as e:
         logger.error(f"❌ Error in sell_bear: {e}", exc_info=True)
@@ -208,11 +225,16 @@ async def main_menu_callback(query: CallbackQuery):
     try:
         text = (
             "🐻 **БеарсМани**\n\n"
-            "🎉 Лавы в нашем приложении!\n\n"
-            "🪣 Выберите эксэквату\n"
+            "🎮 Лавы в нашем приложении!\n\n"
+            "🕹️ Выберите экшн вацу\n"
         )
         
-        await query.message.edit_text(text, reply_markup=get_main_menu(), parse_mode="markdown")
+        try:
+            await query.message.edit_text(text, reply_markup=get_main_menu(), parse_mode="markdown")
+        except Exception as e:
+            logger.warning(f"Could not edit message: {e}, sending new message instead")
+            await query.message.answer(text, reply_markup=get_main_menu(), parse_mode="markdown")
+        
         await query.answer()
     except Exception as e:
         logger.error(f"❌ Error in main_menu_callback: {e}", exc_info=True)
