@@ -1,7 +1,7 @@
 """Start command handler."""
 import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -66,6 +66,12 @@ async def cmd_start(message: Message):
                 welcome_text,
                 reply_markup=get_main_menu(),
                 parse_mode="markdown"
+            )
+            
+            # Remove any old reply keyboards
+            await message.answer(
+                "🐻 Меню загружено!",
+                reply_markup=ReplyKeyboardRemove()
             )
             
     except Exception as e:
