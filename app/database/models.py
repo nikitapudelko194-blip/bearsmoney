@@ -35,6 +35,12 @@ class User(Base):
     withdrawals = relationship('Withdrawal', back_populates='user')
     subscriptions = relationship('Subscription', back_populates='user')
     completed_quests = relationship('Quest', secondary='user_quests', back_populates='completed_by')
+    achievements = relationship('UserAchievement', back_populates='user')
+    daily_logins = relationship('UserDailyLogin', back_populates='user')
+    case_history = relationship('CaseHistory', back_populates='user')
+    bear_insurance = relationship('BearInsurance', back_populates='user')
+    p2p_listings = relationship('P2PListing', back_populates='seller')
+    p2p_purchases = relationship('P2PListing', foreign_keys='P2PListing.buyer_id', back_populates='buyer')
     # Fixed: Use back_populates instead of backref
     referrals = relationship('User', back_populates='referrer', remote_side=[id])
     referrer = relationship('User', remote_side=[referrer_id], back_populates='referrals')
@@ -47,19 +53,23 @@ class Bear(Base):
     id = Column(Integer, primary_key=True)
     owner_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     bear_type = Column(String(50), nullable=False)  # 'common', 'rare', 'epic', 'legendary'
-    variant = Column(Integer, default=1)  # 1-10 для каждого класса
+    variant = Column(Integer, default=1)  # 1-15 для каждого класса
     name = Column(String(255))
     level = Column(Integer, default=1)
     coins_per_hour = Column(Float, default=1.0)
     coins_per_day = Column(Float, default=24.0)
     boost_multiplier = Column(Float, default=1.0)  # For boosts
     boost_until = Column(DateTime, nullable=True)
+    total_coins_earned = Column(Float, default=0)  # Статистика дохода
+    is_locked = Column(Boolean, default=False)  # Лок от продажи
     purchased_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     owner = relationship('User', back_populates='bears')
+    insurance = relationship('BearInsurance', back_populates='bear', uselist=False)
+    p2p_listings = relationship('P2PListing', back_populates='bear')
 
 
 class CoinTransaction(Base):
@@ -186,4 +196,151 @@ class ChannelTask(Base):
     completed = Column(Boolean, default=False)
     completed_at = Column(DateTime, nullable=True)
     reward_claimed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ========== НОВЫЕ МОДЕЛИ ДЛЯ НОВЫХ ФУНКЦИЙ ==========
+
+class UserAchievement(Base):
+    """Достижения пользователя."""
+    __tablename__ = 'user_achievements'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    achievement_type = Column(String(100), nullable=False)  # 'first_million', 'collector', 'max_level', 'legendary_bear', 'billionaire'
+    achievement_name = Column(String(255), nullable=False)
+    achievement_description = Column(Text)
+    reward_coins = Column(Float, default=0)
+    unlocked_at = Column(DateTime, default=datetime.utcnow)
+    is_hidden = Column(Boolean, default=False)  # Скрытые достижения (спойлер)
+    
+    # Relationships
+    user = relationship('User', back_populates='achievements')
+
+
+class UserDailyLogin(Base):
+    """Ежедневные логины - ежедневные награды."""
+    __tablename__ = 'user_daily_logins'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    streak_days = Column(Integer, default=1)  # Текущая полоса дней подряд
+    last_login_date = Column(DateTime, nullable=True)  # Последний логин
+    total_logins = Column(Integer, default=1)  # Всего логинов
+    reward_claimed_today = Column(Boolean, default=False)  # Получена ли награда сегодня
+    last_reward_claimed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship('User', back_populates='daily_logins')
+
+
+class CaseHistory(Base):
+    """История открытия кейсов с RTP статистикой."""
+    __tablename__ = 'case_history'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    case_type = Column(String(50), nullable=False)  # 'common', 'rare', 'epic', 'legendary'
+    reward_type = Column(String(50), nullable=False)  # 'coins', 'ton', 'bear', 'empty'
+    reward_value = Column(Float, nullable=False)  # Сколько получено
+    case_cost = Column(Float, nullable=False)  # Сколько потратил
+    bear_id = Column(Integer, ForeignKey('bears.id'), nullable=True)  # Если получил медведя
+    opened_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship('User', back_populates='case_history')
+
+
+class BearInsurance(Base):
+    """Страховка для редких медведей - защита от потери."""
+    __tablename__ = 'bear_insurance'
+    
+    id = Column(Integer, primary_key=True)
+    bear_id = Column(Integer, ForeignKey('bears.id'), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    is_active = Column(Boolean, default=True)  # Активна ли страховка
+    insurance_type = Column(String(50), default='24h')  # '24h', '48h', 'permanent'
+    cost_coins = Column(Float, default=5000)  # Стоимость страховки в коинах
+    activated_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)  # Когда истекает (если не永久)
+    
+    # Relationships
+    bear = relationship('Bear', back_populates='insurance')
+    user = relationship('User', back_populates='bear_insurance')
+
+
+class P2PListing(Base):
+    """P2P торговля медведями между игроками."""
+    __tablename__ = 'p2p_listings'
+    
+    id = Column(Integer, primary_key=True)
+    bear_id = Column(Integer, ForeignKey('bears.id'), nullable=False, index=True)
+    seller_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    buyer_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)  # None = выставлено на продажу
+    price_coins = Column(Float, nullable=False)  # Цена в коинах
+    status = Column(String(20), default='active')  # 'active', 'sold', 'cancelled'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sold_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    bear = relationship('Bear', back_populates='p2p_listings')
+    seller = relationship('User', back_populates='p2p_listings', foreign_keys=[seller_id])
+    buyer = relationship('User', back_populates='p2p_purchases', foreign_keys=[buyer_id])
+
+
+class CaseGuarantee(Base):
+    """Гарантии в кейсах - каждый N-й кейс гарантированно редкий/эпический."""
+    __tablename__ = 'case_guarantees'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    case_type = Column(String(50), nullable=False)  # 'common', 'rare', 'epic', 'legendary'
+    opened_count = Column(Integer, default=0)  # Сколько открыто кейсов
+    
+    # Гарантии:
+    # common кейсы: каждый 15-й гарантирует редкий
+    # rare кейсы: каждый 50-й гарантирует эпический
+    # epic кейсы: каждый 100-й гарантирует легендарный
+    
+    guarantee_15 = Column(Integer, default=0)  # Счётчик до 15 (для common)
+    guarantee_50 = Column(Integer, default=0)  # Счётчик до 50 (для rare)
+    guarantee_100 = Column(Integer, default=0)  # Счётчик до 100 (для epic/legendary)
+    
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CaseTheme(Base):
+    """Тематические кейсы - сезонные события."""
+    __tablename__ = 'case_themes'
+    
+    id = Column(Integer, primary_key=True)
+    theme_name = Column(String(100), nullable=False)  # 'black_friday', 'seasonal_winter', 'legendary'
+    theme_emoji = Column(String(10))
+    description = Column(Text)
+    cost_coins = Column(Float, nullable=False)
+    cost_ton = Column(Float, default=0)
+    bonus_percent = Column(Float, default=0)  # % бонуса к наградам (Чёрная пятница +50%)
+    is_active = Column(Boolean, default=True)
+    is_seasonal = Column(Boolean, default=False)  # Сезонный ли кейс
+    season = Column(String(50), nullable=True)  # 'winter', 'summer', 'spring', 'autumn'
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class BearFusion(Base):
+    """Переплавка медведей - 10 обычных = 1 редкий."""
+    __tablename__ = 'bear_fusions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    input_bears = Column(String(500))  # JSON array ID медведей для переплавки
+    input_count = Column(Integer, nullable=False)  # Количество (10, 50, 500 и т.д.)
+    input_type = Column(String(50), nullable=False)  # 'common', 'rare', 'epic'
+    output_type = Column(String(50), nullable=False)  # Какой тип получим ('rare', 'epic', 'legendary')
+    output_bear_id = Column(Integer, ForeignKey('bears.id'), nullable=True)  # ID полученного медведя
+    status = Column(String(20), default='pending')  # 'pending', 'completed', 'failed'
+    completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
