@@ -47,6 +47,7 @@ class Bear(Base):
     id = Column(Integer, primary_key=True)
     owner_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     bear_type = Column(String(50), nullable=False)  # 'common', 'rare', 'epic', 'legendary'
+    variant = Column(Integer, default=1)  # 1-10 для каждого класса
     name = Column(String(255))
     level = Column(Integer, default=1)
     coins_per_hour = Column(Float, default=1.0)
