@@ -10,7 +10,7 @@ def get_main_menu() -> InlineKeyboardMarkup:
         # Row 1
         [
             InlineKeyboardButton(text="🐻 Мои медведи", callback_data="bears"),
-            InlineKeyboardButton(text="💰 Баланс", callback_data="balance"),
+            InlineKeyboardButton(text="🛍️ Магазин", callback_data="shop"),
         ],
         # Row 2
         [
@@ -20,16 +20,15 @@ def get_main_menu() -> InlineKeyboardMarkup:
         # Row 3
         [
             InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
-            InlineKeyboardButton(text="🛍️ Магазин", callback_data="shop"),
+            InlineKeyboardButton(text="📈 Статистика", callback_data="stats"),
         ],
         # Row 4
         [
             InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw"),
-            InlineKeyboardButton(text="📈 Статистика", callback_data="stats"),
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
         ],
         # Row 5
         [
-            InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
         ],
     ])
