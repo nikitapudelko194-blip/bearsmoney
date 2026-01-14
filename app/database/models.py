@@ -35,7 +35,9 @@ class User(Base):
     withdrawals = relationship('Withdrawal', back_populates='user')
     subscriptions = relationship('Subscription', back_populates='user')
     completed_quests = relationship('Quest', secondary='user_quests', back_populates='completed_by')
-    referrals = relationship('User', backref='referrer', remote_side=[referrer_id])
+    # Fixed: Use back_populates instead of backref
+    referrals = relationship('User', back_populates='referrer', remote_side=[id])
+    referrer = relationship('User', remote_side=[referrer_id], back_populates='referrals')
 
 
 class Bear(Base):
