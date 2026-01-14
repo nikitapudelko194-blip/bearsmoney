@@ -5,45 +5,74 @@ from app.database.models import Bear, User
 from datetime import datetime, timedelta
 import random
 
-# Bear classification system
+# Bear classification system with 10 variants per rarity class
 BEAR_CLASSES = {
     'common': {
-        'name': '🐻 Обычный',
+        'name': '🐻 Обычные',
         'emoji': '🐻️',
         'cost': 100,
-        'income_per_hour': 1.0,
+        'income_per_hour_base': 1.0,
         'rarity': 'Обычный',
         'color': '⚪',  # Белый
         'sell_price': 50,  # 50% от стоимости
+        'require_premium': False,
+        'variants': 10,  # 10 различных медведей
     },
     'rare': {
-        'name': '🟢 Редкий',
+        'name': '🟢 Редкие',
         'emoji': '🐻',
         'cost': 500,
-        'income_per_hour': 3.0,
+        'income_per_hour_base': 3.0,
         'rarity': 'Редкий',
         'color': '🟢',  # Зелёный
         'sell_price': 250,
+        'require_premium': False,
+        'variants': 10,
     },
     'epic': {
-        'name': '🟣 Эпический',
+        'name': '🟣 Эпические',
         'emoji': '🐨',
         'cost': 2000,
-        'income_per_hour': 8.0,
+        'income_per_hour_base': 8.0,
         'rarity': 'Эпический',
         'color': '🟣',  # Фиолетовый
         'sell_price': 1000,
+        'require_premium': False,
+        'variants': 10,
     },
     'legendary': {
-        'name': '🟡 Легендарный',
+        'name': '🟡 Легендарные',
         'emoji': '🐼',
         'cost': 10000,
-        'income_per_hour': 20.0,
+        'income_per_hour_base': 20.0,
         'rarity': 'Легендарный',
         'color': '🟡',  # Жёлтый
         'sell_price': 5000,
+        'require_premium': True,  # Только за донат
+        'variants': 10,
     },
 }
+
+BEAR_NAMES = {
+    'common': [
+        'Мишка', 'Помидор', 'Никита', 'Маркус', 'Гриша',
+        'Данте', 'Голиаф', 'Удалц', 'Нусси', 'Лола',
+    ],
+    'rare': [
+        'Конрад', 'Макс', 'Павел', 'Антон', 'Патрик',
+        'Виктор', 'Леонард', 'Костя', 'Денис', 'Тим',
+    ],
+    'epic': [
+        'Копфы', 'Зефир', 'Мефистофель', 'Лорды', 'Нарниан',
+        'Орфей', 'Тэкс', 'Ораль', 'Танатос', 'Посейдон',
+    ],
+    'legendary': [
+        'Один', 'Тор', 'Локи', 'Окулт', 'Небуло',
+        'Галилей', 'Невроз', 'Мевала', 'Ментор', 'Титан',
+    ],
+}
+
+MAX_BEAR_LEVEL = 50  # Максимальный уровень
 
 
 class BearsService:
@@ -70,25 +99,52 @@ class BearsService:
         return -1
     
     @staticmethod
+    def get_bear_income_for_level(base_income: float, level: int) -> float:
+        """
+        Calculate income for a given level.
+        Each level increases income by 20%.
+        """
+        return base_income * (1.2 ** (level - 1))
+    
+    @staticmethod
     async def create_bear(
         session: AsyncSession,
         user_id: int,
         bear_type: str,
+        variant: int = None,
         name: str = None
     ) -> Bear:
         """
         Create a new bear for user.
+        Variant: 1-10 для каждого класса.
         """
         if bear_type not in BEAR_CLASSES:
             raise ValueError(f"Invalid bear type: {bear_type}")
         
         bear_info = BEAR_CLASSES[bear_type]
+        
+        # Если вариант не указан, выбираем случайный
+        if variant is None:
+            variant = random.randint(1, bear_info['variants'])
+        else:
+            if not 1 <= variant <= bear_info['variants']:
+                raise ValueError(f"Invalid variant: {variant}")
+        
+        bear_names = BEAR_NAMES[bear_type]
+        bear_name = bear_names[variant - 1]  # Каждые 10 медведей разные
+        
+        income_per_hour = BearsService.get_bear_income_for_level(
+            bear_info['income_per_hour_base'], 
+            1  # Начинаем с 1 уровня
+        )
+        
         bear = Bear(
             owner_id=user_id,
             bear_type=bear_type,
-            name=name or f"{bear_info['name'].split()[-1]} #{random.randint(1000, 9999)}",
-            coins_per_hour=bear_info['income_per_hour'],
-            coins_per_day=bear_info['income_per_hour'] * 24,
+            variant=variant,
+            name=name or f"{bear_name} #{random.randint(1000, 9999)}",
+            coins_per_hour=income_per_hour,
+            coins_per_day=income_per_hour * 24,
         )
         session.add(bear)
         await session.commit()
@@ -98,7 +154,8 @@ class BearsService:
     async def upgrade_bear(session: AsyncSession, bear_id: int, user_id: int) -> Bear:
         """
         Upgrade a bear to the next level.
-        Costs 50 coins per level.
+        Cost: 50 * current_level coins.
+        Max level: 50
         """
         query = select(Bear).where(Bear.id == bear_id, Bear.owner_id == user_id)
         result = await session.execute(query)
@@ -106,6 +163,9 @@ class BearsService:
         
         if not bear:
             raise ValueError("Медведь не найден")
+        
+        if bear.level >= MAX_BEAR_LEVEL:
+            raise ValueError(f"Медведь уже на максимальном уровне ({MAX_BEAR_LEVEL})")
         
         upgrade_cost = 50 * bear.level
         user_query = select(User).where(User.id == user_id)
@@ -116,9 +176,16 @@ class BearsService:
             raise ValueError(f"Недостаточно коинов! Нужно {upgrade_cost}, у вас {user.coins:.0f}")
         
         # Upgrade bear
+        bear_info = BEAR_CLASSES[bear.bear_type]
         bear.level += 1
-        bear.coins_per_hour = bear.coins_per_hour * 1.2
-        bear.coins_per_day = bear.coins_per_day * 1.2
+        
+        # Новые доходы для нового уровня
+        new_income = BearsService.get_bear_income_for_level(
+            bear_info['income_per_hour_base'],
+            bear.level
+        )
+        bear.coins_per_hour = new_income
+        bear.coins_per_day = new_income * 24
         user.coins -= upgrade_cost
         
         await session.commit()
@@ -169,14 +236,23 @@ class BearsService:
             minutes = (time_left.total_seconds() % 3600) // 60
             boost_info = f"\n🔥 Буст активен: {int(hours)}ч {int(minutes)}м (x{bear.boost_multiplier})"
         
+        # Нужно коинов для следующего уровня
+        upgrade_cost = 50 * bear.level
+        next_level_info = ""
+        if bear.level < MAX_BEAR_LEVEL:
+            next_level_info = f"\n\n⬆️ Улучшить: {upgrade_cost} коинов"
+        else:
+            next_level_info = f"\n\n🌟 Максимальный уровень!"
+        
         return (
             f"{bear_class['emoji']} **{bear.name}**\n"
             f"Класс: {bear_class['name']}\n"
-            f"Уровень: {bear.level}\n"
+            f"Уровень: {bear.level}/{MAX_BEAR_LEVEL}\n"
             f"Доход: {bear.coins_per_hour:.1f} коинов/час\n"
             f"Доход в день: {bear.coins_per_day:.1f} коинов\n"
             f"Можно обменять на: {bear_class['sell_price']} коинов\n"
             f"Куплен: {bear.purchased_at.strftime('%d.%m.%Y')}"
+            f"{next_level_info}"
             f"{boost_info}"
         )
     
@@ -189,7 +265,7 @@ class BearsService:
         
         return (
             f"{bear_class['color']} **№{bear_number}** {bear_class['emoji']} {bear.name}\n"
-            f"Уровень: {bear.level} | "
+            f"Уровень: {bear.level}/{MAX_BEAR_LEVEL} | "
             f"Доход: {bear.coins_per_hour:.1f}/ч | "
             f"Обмен: {bear_class['sell_price']}"
         )
