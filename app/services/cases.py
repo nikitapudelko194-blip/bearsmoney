@@ -79,13 +79,13 @@ RARE_CASE_LOOT = [
     ('bear', 'rare:8', 'rare', 10),
 ]
 
-# Loot table for epic cases (TON)
+# Loot table for epic cases (TON) - REDUCED REWARDS
 EPIC_CASE_LOOT = [
-    # TON rewards
-    ('ton', 2.0, 'common', 250),
-    ('ton', 5.0, 'rare', 150),
-    ('ton', 10.0, 'rare', 100),
-    ('empty', 0, 'empty', 300),  # Still very common
+    # TON rewards - reduced from 2-10 to 0.1-1
+    ('ton', 0.1, 'common', 300),
+    ('ton', 0.5, 'common', 200),
+    ('ton', 1.0, 'rare', 100),
+    ('empty', 0, 'empty', 350),  # More pity
     # Epic bears
     ('bear', 'epic:1', 'epic', 80),
     ('bear', 'epic:3', 'epic', 70),
@@ -96,13 +96,12 @@ EPIC_CASE_LOOT = [
     ('bear', 'legendary:3', 'legendary', 15),
 ]
 
-# Loot table for legendary cases (TON)
+# Loot table for legendary cases (TON) - REDUCED REWARDS
 LEGENDARY_CASE_LOOT = [
-    # Large TON rewards
-    ('ton', 10.0, 'rare', 200),
-    ('ton', 20.0, 'epic', 120),
-    ('ton', 50.0, 'epic', 80),
-    ('empty', 0, 'empty', 200),  # Still common
+    # Large TON rewards - reduced from 10-50 to 1-2
+    ('ton', 1.0, 'rare', 250),
+    ('ton', 2.0, 'epic', 150),
+    ('empty', 0, 'empty', 250),  # More pity
     # Many legendary bears
     ('bear', 'legendary:2', 'legendary', 100),
     ('bear', 'legendary:5', 'legendary', 90),
