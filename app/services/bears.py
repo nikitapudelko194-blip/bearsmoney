@@ -50,16 +50,16 @@ BEAR_NAMES = {
     'rare': [
         'Конрад', 'Макс', 'Павел', 'Антон', 'Патрик',
         'Виктор', 'Леонард', 'Костя', 'Денис', 'Тим',
-        'Филипп', 'Эрнест', 'Грегори', 'Андрей', 'Мартин',
+        'Филипп', 'Эрнест', 'Григори', 'Андрей', 'Мартин',
     ],
     'epic': [
         'Кофы', 'Зефир', 'Мефистофель', 'Лорды', 'Нарниан',
-        'Орфей', 'Тэкс', 'Оральь', 'Танатос', 'Посейдон',
+        'Орфей', 'Тэкс', 'Орал', 'Танатос', 'Посейдон',
         'Аполлон', 'Артемида', 'Эрос', 'Церера', 'Морфей',
     ],
     'legendary': [
-        'Один', 'Тор', 'Локи', 'Окулт', 'Небуло',
-        'Галилей', 'Невроз', 'Мевала', 'Ментор', 'Титан',
+        'Один', 'Тор', 'Локи', 'Окульт', 'Небуло',
+        'Галилей', 'Неврноз', 'Мевала', 'Ментор', 'Титан',
         'Атлас', 'Прометей', 'Геракл', 'Эол', 'Арес',
     ],
 }
@@ -75,12 +75,13 @@ class BearsService:
         """
         Get bear stats for a specific variant.
         Each variant is 5% more expensive and generates 5% more income.
+        HARDER ECONOMY: Increased base costs and reduced income.
         """
         base_stats = {
-            'common': {'cost': 100, 'income': 1.0, 'sell': 50},
-            'rare': {'cost': 500, 'income': 3.0, 'sell': 250},
-            'epic': {'cost': 2000, 'income': 8.0, 'sell': 1000},
-            'legendary': {'cost': 10000, 'income': 20.0, 'sell': 5000},
+            'common': {'cost': 500, 'income': 0.4, 'sell': 200},
+            'rare': {'cost': 3000, 'income': 1.5, 'sell': 1000},
+            'epic': {'cost': 15000, 'income': 5.0, 'sell': 5000},
+            'legendary': {'cost': 100000, 'income': 15.0, 'sell': 40000},
         }
         
         if bear_type not in base_stats:
@@ -90,8 +91,8 @@ class BearsService:
             raise ValueError(f"Invalid variant: {variant}")
         
         base = base_stats[bear_type]
-        # Каждый вариант на 5% дороже и доходнее
-        multiplier = 1.05 ** (variant - 1)
+        # Каждый вариант на 8% дороже и доходнее (вместо 5%)
+        multiplier = 1.08 ** (variant - 1)
         
         return {
             'cost': int(base['cost'] * multiplier),
@@ -103,32 +104,31 @@ class BearsService:
     def get_upgrade_cost(level: int) -> int:
         """
         Calculate upgrade cost for a bear.
-        Exponential growth:
-        Level 1->2: 50 coins
-        Level 2->3: 150 coins (50 * 1.1^(2-1))
-        Level 3->4: 340 coins (50 * 1.1^(3-1))
+        HARDER ECONOMY: Exponential growth with higher base and multiplier.
+        Level 1->2: 500 coins (was 50)
+        Level 2->3: 550 coins (was 55)
+        Level 3->4: 605 coins (was 60.5)
         etc.
         """
-        # Базовая стоимость улучшения
-        base_cost = 50
-        # Коэффициент экспоненциального роста
-        multiplier = 1.1 ** (level - 1)
+        # Базовая стоимость улучшения (10x выше)
+        base_cost = 500
+        # Коэффициент экспоненциального роста (выше, чем раньше)
+        multiplier = 1.15 ** (level - 1)  # Was 1.1
         return int(base_cost * multiplier)
     
     @staticmethod
     def get_bear_income_for_level(base_income: float, level: int) -> float:
         """
         Calculate income for a given level.
-        Diminishing returns:
+        HARDER ECONOMY: Even more diminishing returns (5% per level instead of 8%).
         Level 1: base income
-        Level 2: base income * 1.08
-        Level 3: base income * 1.15
-        Level 4: base income * 1.21
+        Level 2: base income * 1.05
+        Level 3: base income * 1.1025
+        Level 4: base income * 1.1576
         etc.
-        Growth slows as level increases.
         """
-        # Меньший мультипликатор для дохода (8% за уровень вместо 20%)
-        return base_income * (1.08 ** (level - 1))
+        # Меньший мультипликатор дохода (5% вместо 8%)
+        return base_income * (1.05 ** (level - 1))
     
     @staticmethod
     async def get_user_bears(session: AsyncSession, user_id: int) -> list[Bear]:
@@ -282,19 +282,19 @@ class BearsService:
         if bear.level < MAX_BEAR_LEVEL:
             next_level_info = (
                 f"\n\n⬆️ Улучшить: {next_upgrade_cost} коинов\n"
-                f"💰 Доход увеличится: +{income_increase:.2f} коин/ч"
+                f"💰 Доход увеличится: +{income_increase:.3f} коин/ч"
             )
         else:
-            next_level_info = f"\n\n🌟 Максимальный уровень!"
+            next_level_info = f"\n\n⭐ Максимальный уровень!"
         
         return (
             f"{bear_class['emoji']} **{bear.name}**\n"
             f"Класс: {bear_class['name']}\n"
             f"Вариант: {bear.variant}/15\n"
             f"Уровень: {bear.level}/{MAX_BEAR_LEVEL}\n"
-            f"💰 Основной доход: {stats['income']:.1f} коин/ч\n"
-            f"💰 Текущий доход: {bear.coins_per_hour:.2f} коин/ч\n"
-            f"📅 Доход в день: {bear.coins_per_day:.2f} коин\n"
+            f"💰 Основной доход: {stats['income']:.3f} коин/ч\n"
+            f"💰 Текущий доход: {bear.coins_per_hour:.3f} коин/ч\n"
+            f"📅 Доход в день: {bear.coins_per_day:.3f} коин\n"
             f"Можно обменять на: {stats['sell']} коинов\n"
             f"Куплен: {bear.purchased_at.strftime('%d.%m.%Y')}"
             f"{next_level_info}"
