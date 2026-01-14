@@ -23,12 +23,13 @@ def setup_handlers():
     """
     try:
         # Import handlers
-        from app.handlers import start, bears, shop
+        from app.handlers import start, bears, shop, profile
         
         # Register routers
         dp.include_router(start.router)
         dp.include_router(bears.router)
         dp.include_router(shop.router)
+        dp.include_router(profile.router)
         
         logger.info("✅ All handlers registered successfully")
     except Exception as e:
