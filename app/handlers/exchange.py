@@ -1,5 +1,6 @@
-"""Handlers for coin-TON exchange."""
+"""Handlers for coin-TON exchange and withdrawals."""
 import logging
+import re
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -20,6 +21,12 @@ class ExchangeStates(StatesGroup):
     """States for exchange flow."""
     waiting_for_coin_amount = State()
     waiting_for_ton_amount = State()
+
+
+class WithdrawStates(StatesGroup):
+    """States for withdrawal flow."""
+    waiting_for_ton_address = State()
+    waiting_for_withdraw_amount = State()
 
 
 @router.callback_query(F.data == "exchange")
@@ -148,7 +155,7 @@ async def process_coin_amount(message: Message, state: FSMContext):
             
             # Calculate TON amount - AUTOMATIC CALCULATION
             rate = settings.COIN_TO_TON_RATE
-            ton_amount = amount * rate  # АВТОМАТИЧЕСКИЙ РАСЧЁТ
+            ton_amount = amount * rate
             coins_per_ton = int(1 / rate)
             
             text = (
@@ -211,7 +218,7 @@ async def confirm_coins_to_ton(query: CallbackQuery, state: FSMContext):
             user.coins -= coin_amount
             user.ton_balance += ton_amount
             
-            # Log transaction (spend coins)
+            # Log transaction
             transaction_spend = CoinTransaction(
                 user_id=user.id,
                 amount=-coin_amount,
@@ -325,7 +332,7 @@ async def process_ton_amount(message: Message, state: FSMContext):
             
             # Calculate coins amount - AUTOMATIC CALCULATION
             rate = settings.COIN_TO_TON_RATE
-            coins_amount = amount / rate  # АВТОМАТИЧЕСКИЙ РАСЧЁТ
+            coins_amount = amount / rate
             coins_per_ton = int(1 / rate)
             
             text = (
@@ -468,4 +475,386 @@ async def exchange_history(query: CallbackQuery):
             await query.answer()
     except Exception as e:
         logger.error(f"❌ Error in exchange_history: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+# ============ WITHDRAWAL ============
+
+
+def validate_ton_address(address: str) -> bool:
+    """
+    Validate TON address format.
+    """
+    # TON address format: EQ... or UQ... (48 symbols)
+    pattern = r'^[EU]Q[A-Za-z0-9_-]{46}$'
+    return bool(re.match(pattern, address))
+
+
+@router.callback_query(F.data == "withdraw")
+async def withdraw_menu(query: CallbackQuery):
+    """
+    Show withdrawal menu.
+    """
+    try:
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            min_withdraw = settings.MIN_WITHDRAW
+            commission = settings.WITHDRAW_COMMISSION * 100  # Convert to percentage
+            
+            # Check if user has enough balance
+            can_withdraw = user.ton_balance >= min_withdraw
+            
+            text = (
+                f"💸 **Вывод средств**\n\n"
+                f"💼 **Ваш баланс**\n"
+                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
+                f"⚠️ **Условия вывода**\n"
+                f"├ 💵 Минимум: {min_withdraw} TON\n"
+                f"├ 📊 Комиссия: {commission:.0f}%\n"
+                f"└ ⏱️ Время: 1-24 часа\n\n"
+            )
+            
+            if can_withdraw:
+                # Calculate example
+                example_amount = min_withdraw
+                fee = example_amount * settings.WITHDRAW_COMMISSION
+                receive_amount = example_amount - fee
+                
+                text += (
+                    f"📊 **Пример расчёта:**\n"
+                    f"Вывод: {example_amount} TON\n"
+                    f"Комиссия: {fee:.4f} TON\n"
+                    f"Получите: {receive_amount:.4f} TON\n\n"
+                    f"✅ Вы можете вывести средства!"
+                )
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💸 Вывести TON", callback_data="start_withdraw")],
+                    [InlineKeyboardButton(text="📊 История выводов", callback_data="withdraw_history")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
+                ])
+            else:
+                needed = min_withdraw - user.ton_balance
+                text += (
+                    f"❌ **Недостаточно средств**\n\n"
+                    f"Нужно ещё: {needed:.4f} TON\n\n"
+                    f"💡 **Как получить TON:**\n"
+                    f"1. Зарабатывайте Coins с помощью медведей\n"
+                    f"2. Обменяйте Coins на TON в разделе '💱 Обмен'\n"
+                    f"3. Приглашайте друзей и получайте бонусы"
+                )
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💱 Обмен", callback_data="exchange")],
+                    [InlineKeyboardButton(text="🐻 Мои медведи", callback_data="bears")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
+                ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in withdraw_menu: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "start_withdraw")
+async def start_withdraw(query: CallbackQuery, state: FSMContext):
+    """
+    Start withdrawal process - ask for TON address.
+    """
+    try:
+        text = (
+            f"💸 **Вывод TON**\n\n"
+            f"🔑 **Введите адрес TON кошелька**\n\n"
+            f"💡 **Формат:**\n"
+            f"• Начинается с EQ... или UQ...\n"
+            f"• Пример: `EQAa1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2`\n\n"
+            f"⚠️ **Важно:**\n"
+            f"Проверьте адрес перед отправкой!\n"
+            f"Средства, отправленные на неверный адрес, не могут быть возвращены!"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="withdraw")],
+        ])
+        
+        await state.set_state(WithdrawStates.waiting_for_ton_address)
+        
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+        except Exception:
+            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+        
+        await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in start_withdraw: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.message(WithdrawStates.waiting_for_ton_address)
+async def process_ton_address(message: Message, state: FSMContext):
+    """
+    Process TON address for withdrawal.
+    """
+    try:
+        address = message.text.strip()
+        
+        # Validate address
+        if not validate_ton_address(address):
+            await message.answer(
+                "❌ **Неверный формат адреса**\n\n"
+                "Адрес TON должен:\n"
+                "• Начинаться с EQ или UQ\n"
+                "• Содержать 48 символов\n\n"
+                "Попробуйте ещё раз.",
+                parse_mode="markdown"
+            )
+            return
+        
+        # Save address and ask for amount
+        await state.update_data(ton_address=address)
+        
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == message.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            min_withdraw = settings.MIN_WITHDRAW
+            max_withdraw = user.ton_balance
+            
+            text = (
+                f"✅ **Адрес принят**\n\n"
+                f"🔑 Кошелёк: `{address}`\n\n"
+                f"💼 **Ваш баланс:** {user.ton_balance:.4f} TON\n"
+                f"💵 **Минимум:** {min_withdraw} TON\n"
+                f"📊 **Максимум:** {max_withdraw:.4f} TON\n\n"
+                f"💸 **Введите сумму для вывода:**"
+            )
+            
+            await state.set_state(WithdrawStates.waiting_for_withdraw_amount)
+            await message.answer(text, parse_mode="markdown")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in process_ton_address: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
+        await state.clear()
+
+
+@router.message(WithdrawStates.waiting_for_withdraw_amount)
+async def process_withdraw_amount(message: Message, state: FSMContext):
+    """
+    Process withdrawal amount.
+    """
+    try:
+        # Parse amount
+        try:
+            amount = float(message.text.replace(',', '').replace(' ', ''))
+        except ValueError:
+            await message.answer("❌ Неверный формат. Введите число.")
+            return
+        
+        min_withdraw = settings.MIN_WITHDRAW
+        
+        if amount < min_withdraw:
+            await message.answer(f"❌ Минимальная сумма: {min_withdraw} TON")
+            return
+        
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == message.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            if amount > user.ton_balance:
+                await message.answer(
+                    f"❌ **Недостаточно средств**\n\n"
+                    f"Доступно: {user.ton_balance:.4f} TON",
+                    parse_mode="markdown"
+                )
+                return
+            
+            # Calculate commission
+            commission = amount * settings.WITHDRAW_COMMISSION
+            receive_amount = amount - commission
+            
+            # Get address from state
+            data = await state.get_data()
+            ton_address = data.get('ton_address')
+            
+            text = (
+                f"💸 **Подтвердите вывод**\n\n"
+                f"🔑 **Адрес:**\n`{ton_address}`\n\n"
+                f"📊 **Расчёт:**\n"
+                f"├ 💵 Сумма: {amount:.4f} TON\n"
+                f"├ 📉 Комиссия ({settings.WITHDRAW_COMMISSION * 100:.0f}%): {commission:.4f} TON\n"
+                f"└ 💰 **Получите: {receive_amount:.4f} TON**\n\n"
+                f"💼 **Останется на балансе:** {user.ton_balance - amount:.4f} TON\n\n"
+                f"⏱️ **Время обработки:** 1-24 часа\n\n"
+                f"⚠️ Проверьте все данные!"
+            )
+            
+            # Store all data in state
+            await state.update_data(
+                withdraw_amount=amount,
+                commission=commission,
+                receive_amount=receive_amount
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_withdraw"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="withdraw"),
+                ],
+            ])
+            
+            await message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in process_withdraw_amount: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
+        await state.clear()
+
+
+@router.callback_query(F.data == "confirm_withdraw")
+async def confirm_withdraw(query: CallbackQuery, state: FSMContext):
+    """
+    Confirm and execute withdrawal.
+    """
+    try:
+        data = await state.get_data()
+        ton_address = data.get('ton_address')
+        withdraw_amount = data.get('withdraw_amount')
+        commission = data.get('commission')
+        receive_amount = data.get('receive_amount')
+        
+        if not all([ton_address, withdraw_amount, commission, receive_amount]):
+            await query.answer("❌ Ошибка данных", show_alert=True)
+            await state.clear()
+            return
+        
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            # Double check balance
+            if user.ton_balance < withdraw_amount:
+                await query.answer("❌ Недостаточно средств", show_alert=True)
+                await state.clear()
+                return
+            
+            # Execute withdrawal
+            user.ton_balance -= withdraw_amount
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=-withdraw_amount,
+                transaction_type='withdraw',
+                description=f'Вывод {receive_amount:.4f} TON на {ton_address[:10]}...{ton_address[-6:]}'
+            )
+            session.add(transaction)
+            
+            await session.commit()
+            
+            # Notify admin about withdrawal (TODO: implement actual payment)
+            admin_text = (
+                f"🚨 **Заявка на вывод**\n\n"
+                f"👤 User ID: {user.telegram_id}\n"
+                f"👤 Username: @{query.from_user.username or 'none'}\n"
+                f"🔑 Адрес: `{ton_address}`\n"
+                f"💰 Сумма: {receive_amount:.4f} TON\n"
+                f"📊 Комиссия: {commission:.4f} TON\n"
+                f"💵 Всего списано: {withdraw_amount:.4f} TON"
+            )
+            
+            try:
+                from aiogram import Bot
+                bot = query.bot
+                if settings.ADMIN_ID:
+                    await bot.send_message(
+                        settings.ADMIN_ID,
+                        admin_text,
+                        parse_mode="markdown"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to notify admin: {e}")
+            
+            # Success message
+            text = (
+                f"✅ **Заявка принята!**\n\n"
+                f"💸 **Детали вывода:**\n"
+                f"├ 💰 Сумма: {receive_amount:.4f} TON\n"
+                f"├ 🔑 Кошелёк: `{ton_address[:10]}...`\n"
+                f"└ ⏱️ Статус: Обрабатывается\n\n"
+                f"💼 **Новый баланс:** {user.ton_balance:.4f} TON\n\n"
+                f"⏱️ Средства поступят на ваш кошелёк в течение 1-24 часов.\n\n"
+                f"📊 Вы можете проверить статус в 'Истории выводов'."
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📊 История", callback_data="withdraw_history")],
+                [InlineKeyboardButton(text="⬅️ В меню", callback_data="main_menu")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer("✅ Заявка принята!")
+            await state.clear()
+            
+    except Exception as e:
+        logger.error(f"❌ Error in confirm_withdraw: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+        await state.clear()
+
+
+@router.callback_query(F.data == "withdraw_history")
+async def withdraw_history(query: CallbackQuery):
+    """
+    Show withdrawal history.
+    """
+    try:
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            # Get last 10 withdrawal transactions
+            transactions_query = select(CoinTransaction).where(
+                CoinTransaction.user_id == user.id,
+                CoinTransaction.transaction_type == 'withdraw'
+            ).order_by(CoinTransaction.created_at.desc()).limit(10)
+            transactions_result = await session.execute(transactions_query)
+            transactions = transactions_result.scalars().all()
+            
+            text = f"📊 **История выводов**\n\n"
+            
+            if not transactions:
+                text += "📄 История пуста"
+            else:
+                for tx in transactions:
+                    date_str = tx.created_at.strftime('%d.%m.%Y %H:%M')
+                    text += f"💸 {tx.description}\n📅 {date_str}\n\n"
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ К выводу", callback_data="withdraw")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in withdraw_history: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
