@@ -34,16 +34,17 @@ async def exchange_menu(query: CallbackQuery):
             user = user_result.scalar_one()
             
             # Exchange rate from config
-            rate = settings.COIN_TO_TON_RATE  # 0.001 TON per coin
+            rate = settings.COIN_TO_TON_RATE  # 0.00001 TON per coin
+            coins_per_ton = int(1 / rate)  # 100,000 coins per TON
             
             text = (
                 f"💱 **Обмен валюты**\n\n"
                 f"💼 **Ваши балансы**\n"
-                f"├ 🪙 Coins: {user.coins:.2f}\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
                 f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
                 f"📈 **Курс обмена**\n"
-                f"├ 1 TON = {1/rate:.0f} Coins\n"
-                f"└ 1 Coin = {rate:.6f} TON\n\n"
+                f"├ 1 TON = {coins_per_ton:,} Coins\n"
+                f"└ 1 Coin = {rate:.8f} TON\n\n"
                 f"⚠️ **Лимиты**\n"
                 f"├ 💰 Мин. обмен: 100 Coins\n"
                 f"└ 💎 Мин. вывод: {settings.MIN_WITHDRAW} TON\n\n"
@@ -90,13 +91,14 @@ async def start_exchange_coins_to_ton(query: CallbackQuery, state: FSMContext):
                 return
             
             rate = settings.COIN_TO_TON_RATE
+            coins_per_ton = int(1 / rate)
             
             text = (
                 f"🪙 → 💎 **Обмен Coins на TON**\n\n"
-                f"💼 Ваш баланс: {user.coins:.2f} Coins\n"
-                f"📈 Курс: 1 Coin = {rate:.6f} TON\n\n"
+                f"💼 Ваш баланс: {user.coins:,.0f} Coins\n"
+                f"📈 Курс: 1 TON = {coins_per_ton:,} Coins\n\n"
                 f"⚠️ Минимум: 100 Coins\n"
-                f"📊 Максимум: {user.coins:.0f} Coins\n\n"
+                f"📊 Максимум: {user.coins:,.0f} Coins\n\n"
                 f"📝 Введите количество Coins для обмена:"
             )
             
@@ -125,7 +127,7 @@ async def process_coin_amount(message: Message, state: FSMContext):
     try:
         # Parse amount
         try:
-            amount = float(message.text)
+            amount = float(message.text.replace(',', '').replace(' ', ''))
         except ValueError:
             await message.answer("❌ Неверный формат. Введите число.")
             return
@@ -140,20 +142,21 @@ async def process_coin_amount(message: Message, state: FSMContext):
             user = user_result.scalar_one()
             
             if amount > user.coins:
-                await message.answer(f"❌ Недостаточно Coins. Доступно: {user.coins:.2f}")
+                await message.answer(f"❌ Недостаточно Coins. Доступно: {user.coins:,.0f}")
                 return
             
             # Calculate TON amount
             rate = settings.COIN_TO_TON_RATE
             ton_amount = amount * rate
+            coins_per_ton = int(1 / rate)
             
             text = (
                 f"✅ **Подтвердите обмен**\n\n"
-                f"🪙 Отдаёте: {amount:.2f} Coins\n"
+                f"🪙 Отдаёте: {amount:,.0f} Coins\n"
                 f"💎 Получите: {ton_amount:.4f} TON\n\n"
-                f"📈 Курс: 1 Coin = {rate:.6f} TON\n\n"
+                f"📈 Курс: 1 TON = {coins_per_ton:,} Coins\n\n"
                 f"💼 Останется:\n"
-                f"├ 🪙 Coins: {user.coins - amount:.2f}\n"
+                f"├ 🪙 Coins: {user.coins - amount:,.0f}\n"
                 f"└ 💎 TON: {user.ton_balance + ton_amount:.4f}\n"
             )
             
@@ -210,7 +213,7 @@ async def confirm_coins_to_ton(query: CallbackQuery, state: FSMContext):
                 user_id=user.id,
                 amount=-coin_amount,
                 transaction_type='exchange_to_ton',
-                description=f'Обмен {coin_amount:.2f} Coins на {ton_amount:.4f} TON'
+                description=f'Обмен {coin_amount:,.0f} Coins на {ton_amount:.4f} TON'
             )
             session.add(transaction_spend)
             
@@ -218,10 +221,10 @@ async def confirm_coins_to_ton(query: CallbackQuery, state: FSMContext):
             
             text = (
                 f"✅ **Обмен выполнен!**\n\n"
-                f"🪙 Отдано: {coin_amount:.2f} Coins\n"
+                f"🪙 Отдано: {coin_amount:,.0f} Coins\n"
                 f"💎 Получено: {ton_amount:.4f} TON\n\n"
                 f"💼 **Новые балансы**\n"
-                f"├ 🪙 Coins: {user.coins:.2f}\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
                 f"└ 💎 TON: {user.ton_balance:.4f}\n"
             )
             
@@ -262,11 +265,12 @@ async def start_exchange_ton_to_coins(query: CallbackQuery, state: FSMContext):
                 return
             
             rate = settings.COIN_TO_TON_RATE
+            coins_per_ton = int(1 / rate)
             
             text = (
                 f"💎 → 🪙 **Обмен TON на Coins**\n\n"
                 f"💼 Ваш баланс: {user.ton_balance:.4f} TON\n"
-                f"📈 Курс: 1 TON = {1/rate:.0f} Coins\n\n"
+                f"📈 Курс: 1 TON = {coins_per_ton:,} Coins\n\n"
                 f"⚠️ Минимум: {min_ton} TON\n"
                 f"📊 Максимум: {user.ton_balance:.4f} TON\n\n"
                 f"📝 Введите количество TON для обмена:"
@@ -297,7 +301,7 @@ async def process_ton_amount(message: Message, state: FSMContext):
     try:
         # Parse amount
         try:
-            amount = float(message.text)
+            amount = float(message.text.replace(',', '').replace(' ', ''))
         except ValueError:
             await message.answer("❌ Неверный формат. Введите число.")
             return
@@ -319,15 +323,16 @@ async def process_ton_amount(message: Message, state: FSMContext):
             # Calculate coins amount
             rate = settings.COIN_TO_TON_RATE
             coins_amount = amount / rate
+            coins_per_ton = int(1 / rate)
             
             text = (
                 f"✅ **Подтвердите обмен**\n\n"
                 f"💎 Отдаёте: {amount:.4f} TON\n"
-                f"🪙 Получите: {coins_amount:.2f} Coins\n\n"
-                f"📈 Курс: 1 TON = {1/rate:.0f} Coins\n\n"
+                f"🪙 Получите: {coins_amount:,.0f} Coins\n\n"
+                f"📈 Курс: 1 TON = {coins_per_ton:,} Coins\n\n"
                 f"💼 Останется:\n"
                 f"├ 💎 TON: {user.ton_balance - amount:.4f}\n"
-                f"└ 🪙 Coins: {user.coins + coins_amount:.2f}\n"
+                f"└ 🪙 Coins: {user.coins + coins_amount:,.0f}\n"
             )
             
             # Store data in state
@@ -383,7 +388,7 @@ async def confirm_ton_to_coins(query: CallbackQuery, state: FSMContext):
                 user_id=user.id,
                 amount=coins_amount,
                 transaction_type='exchange_from_ton',
-                description=f'Обмен {ton_amount:.4f} TON на {coins_amount:.2f} Coins'
+                description=f'Обмен {ton_amount:.4f} TON на {coins_amount:,.0f} Coins'
             )
             session.add(transaction_earn)
             
@@ -392,10 +397,10 @@ async def confirm_ton_to_coins(query: CallbackQuery, state: FSMContext):
             text = (
                 f"✅ **Обмен выполнен!**\n\n"
                 f"💎 Отдано: {ton_amount:.4f} TON\n"
-                f"🪙 Получено: {coins_amount:.2f} Coins\n\n"
+                f"🪙 Получено: {coins_amount:,.0f} Coins\n\n"
                 f"💼 **Новые балансы**\n"
                 f"├ 💎 TON: {user.ton_balance:.4f}\n"
-                f"└ 🪙 Coins: {user.coins:.2f}\n"
+                f"└ 🪙 Coins: {user.coins:,.0f}\n"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
