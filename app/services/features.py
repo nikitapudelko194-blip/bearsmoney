@@ -11,15 +11,15 @@ from app.services.bears import BearsService
 
 logger = logging.getLogger(__name__)
 
-# Достижения
+# ДОСТИЖЕНИЯ
 ACHIEVEMENTS = {
     'first_million': {
-        'name': '🎦 Первый миллион',
+        'name': '🏆 Первый миллион',
         'description': 'Заработать 1,000,000 коинов',
         'reward': 10000,
     },
     'collector': {
-        'name': '🃛 Коллекционер',
+        'name': '📚 Коллекционер',
         'description': 'Обычные, редкие, эпические и легендарные медведи',
         'reward': 50000,
     },
@@ -34,13 +34,13 @@ ACHIEVEMENTS = {
         'reward': 50000,
     },
     'billionaire': {
-        'name': '🪨 Миллиардер',
+        'name': '🤑 Миллиардер',
         'description': 'Заработать 1,000,000,000 коинов',
         'reward': 500000,
     },
 }
 
-# Ежедневные награды
+# ЕЖЕДНЕВНЫЕ НАГРАДЫ
 DAILY_REWARDS = {
     1: {'coins': 100, 'emoji': '💰'},
     2: {'coins': 200, 'emoji': '💰'},
@@ -55,7 +55,7 @@ DAILY_REWARDS = {
     11: {'coins': 6000, 'emoji': '💰'},
     15: {'coins': 0, 'bear': 'rare', 'emoji': '🐻'},  # 15-й день = редкий
     20: {'coins': 0, 'bear': 'rare', 'emoji': '🐻'},
-    30: {'coins': 0, 'bear': 'epic', 'emoji': '🐼'},  # 30-й день = эпический
+    30: {'coins': 0, 'bear': 'epic', 'emoji': '🐻‍❄️'},  # 30-й день = эпический
 }
 
 
@@ -170,7 +170,7 @@ class FeaturesService:
         
         # Проверяются полосы (streak)
         if last_login and (datetime.utcnow().date() - last_login).days > 1:
-            user_login.streak_days = 1  # Полоса ресетилась
+            user_login.streak_days = 1  # Полоса резетилась
         else:
             user_login.streak_days += 1
         
@@ -268,7 +268,7 @@ class FeaturesService:
             user_id=user_id,
             insurance_type=f"{hours}h",
             cost_coins=cost,
-            expires_at=datetime.utcnow() + timedelta(hours=hours),
+            expires_at=datetime.utcnow() + timedelta(hours=hours) if hours != -1 else None,
         )
         session.add(insurance)
         user.coins -= cost
@@ -280,19 +280,43 @@ class FeaturesService:
     
     @staticmethod
     async def list_bear_for_sale(session: AsyncSession, bear_id: int, user_id: int, price_coins: float) -> P2PListing:
-        """Выставить медведя на продажу."""
+        """Выставить медведя на продажу (медведь становится невидим в профиле)."""
         bear = await session.get(Bear, bear_id)
         if not bear or bear.owner_id != user_id:
             raise ValueError("Медведь не найден")
+        
+        # Отмечаем медведя как выставленного на продажу
+        bear.is_on_sale = True
         
         listing = P2PListing(
             bear_id=bear_id,
             seller_id=user_id,
             price_coins=price_coins,
+            status='active',
         )
         session.add(listing)
         await session.commit()
         return listing
+    
+    @staticmethod
+    async def cancel_listing(session: AsyncSession, listing_id: int, user_id: int) -> dict:
+        """Снять медведя с продажи (медведь снова появляется в профиле)."""
+        listing = await session.get(P2PListing, listing_id)
+        if not listing or listing.seller_id != user_id:
+            raise ValueError("Лот не найден")
+        
+        if listing.status != 'active':
+            raise ValueError("Лот больше не активен")
+        
+        # Отмечаем как отменено
+        listing.status = 'cancelled'
+        
+        # Медведь становится видим снова
+        bear = await session.get(Bear, listing.bear_id)
+        bear.is_on_sale = False
+        
+        await session.commit()
+        return {'success': True, 'message': 'Медведь снят с продажи!'}
     
     @staticmethod
     async def buy_bear_from_player(session: AsyncSession, listing_id: int, buyer_id: int) -> dict:
@@ -312,8 +336,9 @@ class FeaturesService:
         buyer.coins -= listing.price_coins
         seller.coins += listing.price_coins
         
-        # Перевод медведя
+        # Перевод медведя и отметка, что он больше не на продаже
         bear.owner_id = buyer_id
+        bear.is_on_sale = False
         
         # Обновление лота
         listing.status = 'sold'
@@ -323,12 +348,40 @@ class FeaturesService:
         await session.commit()
         return {'success': True, 'message': 'Медведь куплен!'}
     
-    # ============ ПЕРЕПЛАВКА МЕДВЕДеЙ ============
+    @staticmethod
+    async def get_available_listings(session: AsyncSession, limit: int = 50, offset: int = 0) -> list[dict]:
+        """Получить все доступные лоты на P2P маркетплейсе."""
+        listings = await session.execute(
+            select(P2PListing)
+            .where(P2PListing.status == 'active')
+            .order_by(desc(P2PListing.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        
+        result = []
+        for listing in listings.scalars():
+            bear = await session.get(Bear, listing.bear_id)
+            seller = await session.get(User, listing.seller_id)
+            result.append({
+                'listing_id': listing.id,
+                'bear_id': bear.id,
+                'bear_type': bear.bear_type,
+                'bear_level': bear.level,
+                'bear_name': bear.name,
+                'price_coins': listing.price_coins,
+                'seller_name': seller.username or seller.first_name,
+                'created_at': listing.created_at,
+            })
+        
+        return result
+    
+    # ============ ПЕРЕПЛАВКА МЕДВЕДЕЙ ============
     
     @staticmethod
     async def fuse_bears(session: AsyncSession, user_id: int, bear_ids: list[int], input_type: str) -> dict:
         """Переплавить медведей (10 джентс = 1 редкий)"""
-        # Определяем выходный тип
+        # Определяем выходной тип
         if input_type == 'common':
             if len(bear_ids) != 10:
                 raise ValueError("Нужно 10 обычных медведей")
@@ -344,7 +397,7 @@ class FeaturesService:
         else:
             raise ValueError("Неверный тип")
         
-        # Проверяют эвеэство медведей
+        # Проверяют эвентство медведей
         bears = await session.execute(
             select(Bear).where(Bear.id.in_(bear_ids), Bear.owner_id == user_id, Bear.bear_type == input_type)
         )
