@@ -2,7 +2,7 @@
 import random
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.models import User, UserCase, CaseReward, Bear
+from app.database.models import User, UserCase, CaseReward, Bear, CoinTransaction
 from app.services.bears import BearsService
 from datetime import datetime
 
@@ -188,13 +188,44 @@ class CasesService:
         
         case_info = CASE_TYPES[case_type]
         
-        # Check if user has enough coins/TON
+        # ✅ CRITICAL FIX: Check if user has enough coins/TON
         if case_info['cost_coins'] > 0:
             if user.coins < case_info['cost_coins']:
-                raise ValueError(f"Недостаточно коинов! Нужно {case_info['cost_coins']}, у вас {user.coins:.0f}")
+                raise ValueError(f"❌ Недостаточно коинов!\nНужно: {case_info['cost_coins']:,.0f}\nУ вас: {user.coins:,.0f}")
             user.coins -= case_info['cost_coins']
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=-case_info['cost_coins'],
+                transaction_type='case_open',
+                description=f'Открытие {case_info["name"]} (-{case_info["cost_coins"]:,.0f} коинов)'
+            )
+            session.add(transaction)
         
-        # TODO: Check TON balance if needed (need integration with wallet)
+        # ✅ CRITICAL FIX: Check TON balance if case costs TON
+        if case_info['cost_ton'] > 0:
+            if user.ton_balance < case_info['cost_ton']:
+                raise ValueError(
+                    f"❌ Недостаточно TON!\n\n"
+                    f"Нужно: {case_info['cost_ton']:.2f} TON\n"
+                    f"У вас: {user.ton_balance:.4f} TON\n\n"
+                    f"💡 Как получить TON:\n"
+                    f"1. Зарабатывайте Coins с медведями\n"
+                    f"2. Обменяйте Coins на TON в '💱 Обмен'"
+                )
+            
+            # ✅ Deduct TON from balance
+            user.ton_balance -= case_info['cost_ton']
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=-case_info['cost_ton'],
+                transaction_type='case_open_ton',
+                description=f'Открытие {case_info["name"]} (-{case_info["cost_ton"]:.2f} TON)'
+            )
+            session.add(transaction)
         
         # Roll reward
         reward_type, reward_value, rarity = CasesService._roll_reward(case_type)
@@ -210,10 +241,31 @@ class CasesService:
         # Apply reward
         if reward_type == 'coins':
             user.coins += reward_value
-            result['reward_message'] = f"💰 Коины: +{reward_value:.0f}"
+            result['reward_message'] = f"💰 Коины: +{reward_value:,.0f}"
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=reward_value,
+                transaction_type='case_reward',
+                description=f'Награда из {case_info["name"]} (+{reward_value:,.0f} коинов)'
+            )
+            session.add(transaction)
+            
         elif reward_type == 'ton':
-            # TODO: Add TON to user wallet
-            result['reward_message'] = f"💵 ТОН: +{reward_value:.2f}"
+            # ✅ Add TON to user balance
+            user.ton_balance += reward_value
+            result['reward_message'] = f"💵 ТОН: +{reward_value:.4f}"
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=reward_value,
+                transaction_type='case_reward_ton',
+                description=f'Награда из {case_info["name"]} (+{reward_value:.4f} TON)'
+            )
+            session.add(transaction)
+            
         elif reward_type == 'bear':
             # Parse bear info (e.g., 'rare:5' or 'legendary:10')
             bear_type, variant = reward_value.split(':')
@@ -222,6 +274,7 @@ class CasesService:
             result['bear_created'] = bear
             bear_class = BearsService.get_bear_class_info(bear_type)
             result['reward_message'] = f"{bear_class['emoji']} Медведь: {bear.name} (Вариант {variant}/15)"
+            
         elif reward_type == 'empty':
             result['reward_message'] = "😭 Пусто..."
         
@@ -237,7 +290,7 @@ class CasesService:
         
         cost_text = ""
         if case_info['cost_coins'] > 0:
-            cost_text = f"💰 {case_info['cost_coins']} коинов"
+            cost_text = f"💰 {case_info['cost_coins']:,} коинов"
         if case_info['cost_ton'] > 0:
             if cost_text:
                 cost_text += f" или "
@@ -257,7 +310,7 @@ class CasesService:
         rarity_emoji = {
             'empty': '⭕',
             'common': '🟢',
-            'rare': '🟣',
+            'rare': '🟪',
             'epic': '🔥',
             'legendary': '🌟',
         }
