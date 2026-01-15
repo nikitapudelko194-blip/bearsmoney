@@ -59,17 +59,17 @@ COMMON_CASE_LOOT = [
 ]
 
 # Loot table for rare cases (coins)
-# COST: 1000 coins
+# COST: 1000 coins - BALANCED (reduced big rewards)
 RARE_CASE_LOOT = [
     # More coins
     ('coins', 500, 'common', 300),
     ('coins', 1000, 'common', 250),
-    ('coins', 2000, 'rare', 150),
-    ('coins', 3000, 'rare', 100),
-    ('empty', 0, 'empty', 400),  # Still common
-    # TON (very rare)
-    ('ton', 0.1, 'legendary', 8),
-    ('ton', 0.5, 'legendary', 3),
+    ('coins', 2000, 'rare', 80),      # REDUCED from 150 (10.3% → 5.8%)
+    ('coins', 3000, 'rare', 40),      # REDUCED from 100 (6.8% → 2.9%)
+    ('empty', 0, 'empty', 480),       # INCREASED from 400 (27.4% → 31.6%)
+    # TON (very rare) - REDUCED
+    ('ton', 0.1, 'legendary', 4),     # REDUCED from 8 (0.5% → 0.3%)
+    ('ton', 0.5, 'legendary', 2),     # REDUCED from 3 (0.2% → 0.1%)
     # More bears
     ('bear', 'common:5', 'common', 40),
     ('bear', 'common:10', 'common', 30),
