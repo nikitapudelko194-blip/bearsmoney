@@ -14,11 +14,16 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Экономические константы
+STARTING_BONUS = 3000  # Стартовый бонус
+REFERRAL_BONUS_REFERRER = 1000  # Бонус рефереру
+REFERRAL_BONUS_REFERRED = 500   # Бонус новому игроку
+
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     """
-    Start command handler.
+    Start command handler with improved economy.
     """
     try:
         # Check for referral code
@@ -36,47 +41,83 @@ async def cmd_start(message: Message):
             user = result.scalar_one_or_none()
             
             if not user:
+                # Calculate starting coins
+                starting_coins = STARTING_BONUS
+                referral_bonus = 0
+                
+                # Check if referrer exists
+                referrer = None
+                if referrer_id:
+                    referrer_query = select(User).where(User.telegram_id == referrer_id)
+                    referrer_result = await session.execute(referrer_query)
+                    referrer = referrer_result.scalar_one_or_none()
+                    
+                    if referrer:
+                        # Give bonus to both
+                        referral_bonus = REFERRAL_BONUS_REFERRED
+                        starting_coins += referral_bonus
+                        referrer.coins += REFERRAL_BONUS_REFERRER
+                        logger.info(f"✅ Referral bonus: {referrer_id} +{REFERRAL_BONUS_REFERRER}, new user +{referral_bonus}")
+                
                 # Create new user
                 user = User(
                     telegram_id=message.from_user.id,
                     username=message.from_user.username,
                     first_name=message.from_user.first_name,
-                    coins=500.0,  # Starting coins
-                    ton_balance=0.0,  # Starting TON
+                    coins=float(starting_coins),
+                    ton_balance=0.0,
                     created_at=datetime.utcnow(),
-                    referred_by=referrer_id,  # Set referrer
+                    referred_by=referrer_id if referrer else None,
                 )
                 session.add(user)
                 await session.commit()
                 
                 # Notify referrer
-                if referrer_id:
-                    referrer_query = select(User).where(User.telegram_id == referrer_id)
-                    referrer_result = await session.execute(referrer_query)
-                    referrer = referrer_result.scalar_one_or_none()
-                    if referrer:
-                        logger.info(f"✅ User {message.from_user.id} referred by {referrer_id}")
+                if referrer:
+                    try:
+                        from aiogram import Bot
+                        bot = message.bot
+                        await bot.send_message(
+                            referrer.telegram_id,
+                            f"🎉 **По вашей ссылке зарегистрировался новый игрок!**\n\n"
+                            f"💰 Получено: {REFERRAL_BONUS_REFERRER} коинов",
+                            parse_mode="markdown"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not notify referrer: {e}")
                 
                 welcome_text = (
                     f"🐻 **Лавы в БеарсМани!**\n\n"
                     f"🎉 Привет, {message.from_user.first_name}!\n\n"
-                    f"🪣 В этом приложении вы можете:\n"
-                    f"- 🐻 Собирать медведей\n"
-                    f"- 💰 Зарабатывать коины\n"
-                    f"- 🎁 Открывать ящики\n"
-                    f"- 💱 Обменивать на TON\n"
-                    f"- 📋 Выполнять квесты\n"
-                    f"- 👥 Приглашать друзей\n\n"
-                    f"🌟 Вы получили 500 коинов для начала!\n\n"
-                    f"💡 **Совет**: Начните с покупки обычного медведя (500 коинов). Он будет приносить доход!"
+                    f"🐻 **Что ты можешь делать:**\n"
+                    f"• 🐻 Покупать медведей (приносят пассивный доход)\n"
+                    f"• ⬆️ Улучшать их для большего дохода\n"
+                    f"• 💰 Выводить заработанные коины\n"
+                    f"• 👥 Приглашать друзей и получать бонусы\n\n"
                 )
-                if referrer_id:
-                    welcome_text += f"\n\n✅ Вы пришли по реферальной ссылке!"
-                logger.info(f"🐻 New user registered: {message.from_user.id} ({message.from_user.first_name})")
+                
+                if referral_bonus > 0:
+                    welcome_text += (
+                        f"🎁 **Стартовый капитал:**\n"
+                        f"├ 🎁 Базовый бонус: {STARTING_BONUS} коинов\n"
+                        f"├ 👥 Реферальный бонус: {referral_bonus} коинов\n"
+                        f"└ 💰 **Итого: {starting_coins} коинов!**\n\n"
+                    )
+                else:
+                    welcome_text += f"🎁 **Стартовый бонус: {starting_coins} коинов!**\n\n"
+                
+                welcome_text += (
+                    f"💡 **Совет:**\n"
+                    f"Начни с покупки 5 обычных медведей (600 коинов каждый).\n"
+                    f"Они будут приносить тебе пассивный доход!\n\n"
+                    f"👉 Нажми '🛍️ Магазин' чтобы начать!"
+                )
+                
+                logger.info(f"🐻 New user: {message.from_user.id} | Start: {starting_coins} coins | Ref: {referrer_id or 'None'}")
             else:
                 # User already exists
                 welcome_text = (
-                    f"🐻 **Лавы в БеарсМани!**\n\n"
+                    f"🐻 **С возвращением!**\n\n"
                     f"💰 **Основное меню**\n\n"
                     f"👤 @{message.from_user.username or 'User'}\n"
                     f"🪙 Баланс: {user.coins:.0f} коинов\n"
@@ -147,11 +188,11 @@ async def quests_menu(query: CallbackQuery):
         text = (
             "📋 **Квесты**\n\n"
             "🚧 Функция в разработке!\n\n"
-            "🔜 Скоро здесь появятся:\n"
-            "- ✅ Ежедневные квесты\n"
-            "- ✅ Недельные задания\n"
-            "- ✅ Специальные ачивки\n"
-            "- ✅ Награды за выполнение\n\n"
+            "🔜 Скоро здесь появятся:"
+            "• ✅ Ежедневные квесты\n"
+            "• ✅ Недельные задания\n"
+            "• ✅ Специальные ачивки\n"
+            "• ✅ Награды за выполнение\n\n"
             "👍 Следите за обновлениями!"
         )
         
@@ -175,7 +216,7 @@ async def quests_menu(query: CallbackQuery):
 @router.callback_query(F.data == "referrals")
 async def referrals_menu(query: CallbackQuery):
     """
-    Show referrals system with 3 tiers.
+    Show referrals system.
     """
     try:
         async with get_session() as session:
@@ -183,25 +224,10 @@ async def referrals_menu(query: CallbackQuery):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
-            # Get referrals by tier
-            # Tier 1: direct referrals
-            tier1_query = select(User).where(User.referred_by == user.telegram_id)
-            tier1_result = await session.execute(tier1_query)
-            tier1_users = tier1_result.scalars().all()
-            
-            # Tier 2: referrals of tier 1
-            tier2_users = []
-            for t1_user in tier1_users:
-                tier2_query = select(User).where(User.referred_by == t1_user.telegram_id)
-                tier2_result = await session.execute(tier2_query)
-                tier2_users.extend(tier2_result.scalars().all())
-            
-            # Tier 3: referrals of tier 2
-            tier3_users = []
-            for t2_user in tier2_users:
-                tier3_query = select(User).where(User.referred_by == t2_user.telegram_id)
-                tier3_result = await session.execute(tier3_query)
-                tier3_users.extend(tier3_result.scalars().all())
+            # Get direct referrals
+            referrals_query = select(User).where(User.referred_by == user.telegram_id)
+            referrals_result = await session.execute(referrals_query)
+            referrals = referrals_result.scalars().all()
             
             # Generate referral link
             bot_username = "bearsmoney_bot"  # TODO: Get from config
@@ -211,50 +237,33 @@ async def referrals_menu(query: CallbackQuery):
                 f"👥 **Реферальная система**\n\n"
                 f"🔗 **Ваша ссылка:**\n"
                 f"`{referral_link}`\n\n"
-                f"💰 **Система дохода:**\n"
-                f"🥇 1-й круг: **20%** от трат рефералов\n"
-                f"🥈 2-й круг: **10%** от трат рефералов ваших рефералов\n"
-                f"🥉 3-й круг: **5%** от трат рефералов 2-го круга\n\n"
+                f"💰 **Ваши бонусы:**\n"
+                f"• 🎁 За каждого друга: **{REFERRAL_BONUS_REFERRER} коинов**\n"
+                f"• 🎁 Ваш друг получит: **{REFERRAL_BONUS_REFERRED} коинов**\n\n"
             )
             
-            # Tier 1
-            text += f"\n🥇 **1-й круг** ({len(tier1_users)} чел.)\n"
-            if tier1_users:
-                tier1_earnings = sum(u.referral_earnings_tier1 or 0 for u in tier1_users)
-                text += f"├ 💰 Заработано: {user.referral_earnings_tier1 or 0:.0f} коинов\n"
-                for idx, ref in enumerate(tier1_users[:5], 1):
-                    text += f"├ {idx}. @{ref.username or ref.first_name}\n"
-                if len(tier1_users) > 5:
-                    text += f"└ и ещё {len(tier1_users) - 5}...\n"
+            # Referrals list
+            text += f"👥 **Ваши рефералы** ({len(referrals)} чел.)\n"
+            if referrals:
+                earned = len(referrals) * REFERRAL_BONUS_REFERRER
+                text += f"💰 Заработано: {earned} коинов\n\n"
+                for idx, ref in enumerate(referrals[:5], 1):
+                    status = "✅" if ref.coins > 1000 else "🔵"
+                    text += f"{idx}. {status} @{ref.username or ref.first_name}\n"
+                if len(referrals) > 5:
+                    text += f"и ещё {len(referrals) - 5}...\n"
             else:
-                text += "└ Пусто\n"
+                text += "Пусто. Пригласи друзей!\n"
             
-            # Tier 2
-            text += f"\n🥈 **2-й круг** ({len(tier2_users)} чел.)\n"
-            if tier2_users:
-                text += f"├ 💰 Заработано: {user.referral_earnings_tier2 or 0:.0f} коинов\n"
-                text += f"└ 👥 Рефералы ваших рефералов\n"
-            else:
-                text += "└ Пусто\n"
-            
-            # Tier 3
-            text += f"\n🥉 **3-й круг** ({len(tier3_users)} чел.)\n"
-            if tier3_users:
-                text += f"├ 💰 Заработано: {user.referral_earnings_tier3 or 0:.0f} коинов\n"
-                text += f"└ 👥 Рефералы 2-го круга\n"
-            else:
-                text += "└ Пусто\n"
-            
-            # Total
-            total_earnings = (
-                (user.referral_earnings_tier1 or 0) +
-                (user.referral_earnings_tier2 or 0) +
-                (user.referral_earnings_tier3 or 0)
+            text += (
+                f"\n👉 **Как это работает:**\n"
+                f"1. Поделись ссылкой с друзьями\n"
+                f"2. Когда они зарегистрируются - получишь бонус!\n"
+                f"3. Чем больше друзей - тем больше коинов!"
             )
-            text += f"\n💸 **Всего заработано:** {total_earnings:.0f} коинов"
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔗 Скопировать ссылку", url=referral_link)],
+                [InlineKeyboardButton(text="📤 Поделиться", url=f"https://t.me/share/url?url={referral_link}&text=Присоединяйся к БеарсМани!")],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
             ])
             
