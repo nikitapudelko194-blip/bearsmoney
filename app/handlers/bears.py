@@ -340,14 +340,15 @@ async def sell_bear(query: CallbackQuery):
                 await query.answer("❌ Медведь не найден")
                 return
             
-            # Get bear number
+            # Get bear number and stats (WITH VARIANT!)
             bear_num = await BearsService.get_bear_number(session, bear_id, user.id)
             class_info = BearsService.get_bear_class_info(bear.bear_type)
+            stats = BearsService.get_bear_stats(bear.bear_type, bear.variant)  # ✅ FIX!
             
             text = (
                 f"📋 Вы уверены что хотите продать?\n\n"
                 f"{class_info['color']} **№{bear_num}. {bear.name}** ({class_info['rarity']})\n"
-                f"Получите: {class_info['sell_price']} коинов"
+                f"Получите: {stats['sell']} коинов"  # ✅ FIX!
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -415,12 +416,14 @@ async def p2p_sell_bear(query: CallbackQuery, state: FSMContext):
                 return
             
             class_info = BearsService.get_bear_class_info(bear.bear_type)
+            stats = BearsService.get_bear_stats(bear.bear_type, bear.variant)  # ✅ FIX!
+            
             text = (
                 f"📤 **Выставить на P2P**\n\n"
                 f"{class_info['color']} {bear.name} ({class_info['rarity']})\n"
                 f"Уровень: {bear.level}\n\n"
                 f"💬 Введите цену в коинах:\n"
-                f"Мин. {class_info['sell_price']} коинов"
+                f"Мин. {stats['sell']} коинов"  # ✅ FIX!
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
