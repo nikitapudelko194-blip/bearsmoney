@@ -135,10 +135,14 @@ async def bear_detail(query: CallbackQuery, state: FSMContext):
             text += f"{class_info['emoji']} {class_info['rarity']}\n\n"
             text += await BearsService.format_bear_info(bear, user)
             
+            # Get upgrade cost for button
+            upgrade_cost = BearsService.get_upgrade_cost(bear.bear_type, bear.level)
+            cost_text = f"{upgrade_cost // 1000}k" if upgrade_cost >= 1000 else str(upgrade_cost)
+            
             # ALL BUTTONS
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="⬆️ Улучшить (50к)", callback_data=f"upgrade_bear:{bear_id}"),
+                    InlineKeyboardButton(text=f"⬆️ Улучшить ({cost_text})", callback_data=f"upgrade_bear:{bear_id}"),
                     InlineKeyboardButton(text="🔥 Буст", callback_data=f"boost_bear:{bear_id}"),
                 ],
                 [
