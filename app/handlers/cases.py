@@ -26,24 +26,26 @@ async def cases_menu(query: CallbackQuery):
             user = user_result.scalar_one()
             
             text = (
-                "📋 **Ящики**\n\n"
-                "💰 Ваш баланс: {user.coins:.0f} коинов\n\n"
-                "Выберите ящик:\n\n"
+                "🎰 **Ящики**\n\n"
+                f"💼 **Ваши балансы**\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
+                "🎲 Выберите ящик:\n"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📋 Обычный", callback_data="case_info:common")],
-                [InlineKeyboardButton(text="📦 Редкий", callback_data="case_info:rare")],
-                [InlineKeyboardButton(text="🔥 Эпический", callback_data="case_info:epic")],
-                [InlineKeyboardButton(text="🌟 Легендарный", callback_data="case_info:legendary")],
+                [InlineKeyboardButton(text="📋 Обычный (200 Coins)", callback_data="case_info:common")],
+                [InlineKeyboardButton(text="📦 Редкий (1,000 Coins)", callback_data="case_info:rare")],
+                [InlineKeyboardButton(text="🔥 Эпический (1.0 TON)", callback_data="case_info:epic")],
+                [InlineKeyboardButton(text="🌟 Легендарный (5.0 TON)", callback_data="case_info:legendary")],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
             ])
             
             try:
-                await query.message.edit_text(text.format(user=user), reply_markup=keyboard, parse_mode="markdown")
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
             except Exception as e:
                 logger.warning(f"Could not edit message: {e}, sending new message instead")
-                await query.message.answer(text.format(user=user), reply_markup=keyboard, parse_mode="markdown")
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
             
             await query.answer()
     except Exception as e:
@@ -69,26 +71,49 @@ async def case_info(query: CallbackQuery):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
-            case_info = CasesService.get_case_info(case_type)
+            case_info_data = CasesService.get_case_info(case_type)
             
             text = (
                 f"{CasesService.format_case_info(case_type)}\n\n"
-                f"💰 Ваш баланс: {user.coins:.0f} коинов\n\n"
+                f"💼 **Ваши балансы**\n"
             )
             
-            # Check if user has enough coins
-            if case_info['cost_coins'] > 0 and user.coins < case_info['cost_coins']:
-                text += f"❌ Недостаточно коинов (нужно {case_info['cost_coins']})"
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="cases")],
-                ])
-            else:
-                text += f"😎 Открыть ящик?"
+            # Show relevant balance
+            if case_info_data['cost_coins'] > 0:
+                text += f"├ 🪙 Coins: {user.coins:,.0f}\n"
+            if case_info_data['cost_ton'] > 0:
+                text += f"└ 💎 TON: {user.ton_balance:.4f}\n"
+            
+            text += "\n"
+            
+            # Check if user has enough balance
+            can_open = True
+            if case_info_data['cost_coins'] > 0 and user.coins < case_info_data['cost_coins']:
+                can_open = False
+                text += f"❌ Недостаточно коинов\nНужно ещё: {case_info_data['cost_coins'] - user.coins:,.0f}"
+            
+            if case_info_data['cost_ton'] > 0 and user.ton_balance < case_info_data['cost_ton']:
+                can_open = False
+                text += (
+                    f"❌ Недостаточно TON\n"
+                    f"Нужно ещё: {case_info_data['cost_ton'] - user.ton_balance:.4f} TON\n\n"
+                    f"💡 **Как получить TON:**\n"
+                    f"1. Зарабатывайте Coins с медведями\n"
+                    f"2. Обменяйте Coins на TON в '💱 Обмен'"
+                )
+            
+            if can_open:
+                text += f"✅ Вы можете открыть этот ящик!"
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [
                         InlineKeyboardButton(text="✅ Открыть", callback_data=f"open_case:{case_type}"),
-                        InlineKeyboardButton(text="⬅️ Назад", callback_data="cases"),
+                        InlineKeyboardButton(text="❌ Отмена", callback_data="cases"),
                     ],
+                ])
+            else:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💱 Обмен", callback_data="exchange")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="cases")],
                 ])
             
             try:
@@ -124,12 +149,12 @@ async def open_case(query: CallbackQuery):
                 
                 # Add bear info if it was a bear reward
                 if result['bear_created']:
-                    bear_info = await CasesService.format_case_info(case_type)  # Reuse for formatting
-                    text += f"\n\n🐻 Новый медведь: {result['bear_created'].name}"
+                    text += f"\n\n🐻 **Новый медведь:** {result['bear_created'].name}"
+                    text += f"\n📊 Доход: {result['bear_created'].coins_per_hour:.1f} коинов/час"
                 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="📦 Открыть ещё", callback_data=f"case_info:{case_type}"),
+                        InlineKeyboardButton(text="🎰 Открыть ещё", callback_data=f"case_info:{case_type}"),
                         InlineKeyboardButton(text="⬅️ Назад", callback_data="cases"),
                     ],
                 ])
@@ -143,7 +168,7 @@ async def open_case(query: CallbackQuery):
                 await query.answer("😮 Открыто!")
                 
             except ValueError as e:
-                await query.answer(f"❌ {str(e)}", show_alert=True)
+                await query.answer(f"{str(e)}", show_alert=True)
                 
     except Exception as e:
         logger.error(f"❌ Error in open_case: {e}", exc_info=True)
