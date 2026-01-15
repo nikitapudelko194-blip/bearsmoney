@@ -42,6 +42,7 @@ async def cmd_start(message: Message):
                     username=message.from_user.username,
                     first_name=message.from_user.first_name,
                     coins=500.0,  # Starting coins
+                    ton_balance=0.0,  # Starting TON
                     created_at=datetime.utcnow(),
                     referred_by=referrer_id,  # Set referrer
                 )
@@ -63,6 +64,7 @@ async def cmd_start(message: Message):
                     f"- 🐻 Собирать медведей\n"
                     f"- 💰 Зарабатывать коины\n"
                     f"- 🎁 Открывать ящики\n"
+                    f"- 💱 Обменивать на TON\n"
                     f"- 📋 Выполнять квесты\n"
                     f"- 👥 Приглашать друзей\n\n"
                     f"🌟 Вы получили 500 коинов для начала!\n\n"
@@ -77,8 +79,9 @@ async def cmd_start(message: Message):
                     f"🐻 **Лавы в БеарсМани!**\n\n"
                     f"💰 **Основное меню**\n\n"
                     f"👤 @{message.from_user.username or 'User'}\n"
-                    f"💰 Ваш баланс: {user.coins:.0f} коинов\n"
-                    f"🤝 Уровень: {user.level}"
+                    f"🪙 Баланс: {user.coins:.0f} коинов\n"
+                    f"💎 TON: {user.ton_balance:.4f}\n"
+                    f"⭐ Уровень: {user.level}"
                 )
                 logger.info(f"🐻 User returned: {message.from_user.id}")
             
@@ -100,6 +103,37 @@ async def cmd_start(message: Message):
             f"❌ Ошибка при инициализации.\n\n"
             f"Технические детали: {str(e)}"
         )
+
+
+@router.callback_query(F.data == "main_menu")
+async def main_menu_callback(query: CallbackQuery):
+    """
+    Return to main menu.
+    """
+    try:
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            text = (
+                f"🐻 **Лавы в БеарсМани!**\n\n"
+                f"💰 **Основное меню**\n\n"
+                f"👤 @{query.from_user.username or 'User'}\n"
+                f"🪙 Баланс: {user.coins:.0f} коинов\n"
+                f"💎 TON: {user.ton_balance:.4f}\n"
+                f"⭐ Уровень: {user.level}"
+            )
+            
+            try:
+                await query.message.edit_text(text, reply_markup=get_main_menu(), parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=get_main_menu(), parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in main_menu_callback: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
 # ============ QUESTS ============
