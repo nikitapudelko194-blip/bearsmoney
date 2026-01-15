@@ -19,6 +19,7 @@ class User(Base):
     username = Column(String(255))
     first_name = Column(String(255))
     coins = Column(Float, default=0)
+    ton_balance = Column(Float, default=0)  # TON баланс
     level = Column(Integer, default=1)
     experience = Column(Float, default=0)
     is_premium = Column(Boolean, default=False)
@@ -87,7 +88,7 @@ class CoinTransaction(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     amount = Column(Float, nullable=False)
-    transaction_type = Column(String(50), nullable=False)  # 'earn', 'spend', 'quest_reward', 'referral'
+    transaction_type = Column(String(50), nullable=False)  # 'earn', 'spend', 'quest_reward', 'referral', 'exchange_to_ton', 'exchange_from_ton'
     description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     
