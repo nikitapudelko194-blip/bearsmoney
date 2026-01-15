@@ -69,6 +69,7 @@ BEAR_NAMES = {
 }
 
 MAX_BEAR_LEVEL = 50
+MAX_BEARS_LEVEL_1 = 10  # Максимум 10 медведей 1-го уровня
 
 
 class BearsService:
@@ -78,14 +79,15 @@ class BearsService:
     def get_bear_stats(bear_type: str, variant: int) -> dict:
         """
         Get bear stats for a specific variant.
-        Each variant is 5% more expensive and generates 5% more income.
-        HARDER ECONOMY: Increased base costs and reduced income.
+        Each variant is 8% more expensive and generates 8% more income.
+        HARDER ECONOMY: Base prices increased 1.5x, base income reduced 20%.
         """
         base_stats = {
-            'common': {'cost': 500, 'income': 0.4, 'sell': 200},
-            'rare': {'cost': 3000, 'income': 1.5, 'sell': 1000},
-            'epic': {'cost': 15000, 'income': 5.0, 'sell': 5000},
-            'legendary': {'cost': 100000, 'income': 15.0, 'sell': 40000},
+            # Цены увеличены 1.5x, доход уменьшен 20%
+            'common': {'cost': 750, 'income': 0.32, 'sell': 300},  # было 500/0.4/200
+            'rare': {'cost': 4500, 'income': 1.2, 'sell': 1500},  # было 3000/1.5/1000
+            'epic': {'cost': 22500, 'income': 4.0, 'sell': 7500},  # было 15000/5.0/5000
+            'legendary': {'cost': 150000, 'income': 12.0, 'sell': 60000},  # было 100000/15.0/40000
         }
         
         if bear_type not in base_stats:
@@ -95,7 +97,7 @@ class BearsService:
             raise ValueError(f"Invalid variant: {variant}")
         
         base = base_stats[bear_type]
-        # Каждый вариант на 8% дороже и доходнее (вместо 5%)
+        # Каждый вариант на 8% дороже и доходнее
         multiplier = 1.08 ** (variant - 1)
         
         return {
@@ -179,9 +181,27 @@ class BearsService:
         """
         Create a new bear for user.
         Variant: 1-15 для каждого класса.
+        
+        LIMIT: Максимум 10 медведей 1-го уровня.
         """
         if bear_type not in BEAR_CLASSES:
             raise ValueError(f"Invalid bear type: {bear_type}")
+        
+        # Проверяем лимит медведей 1-го уровня
+        level_1_query = select(Bear).where(
+            Bear.owner_id == user_id,
+            Bear.level == 1,
+            Bear.is_on_sale == False
+        )
+        level_1_result = await session.execute(level_1_query)
+        level_1_bears = level_1_result.scalars().all()
+        
+        if len(level_1_bears) >= MAX_BEARS_LEVEL_1:
+            raise ValueError(
+                f"⚠️ Лимит медведей 1-го уровня: {MAX_BEARS_LEVEL_1}\n"
+                f"У вас уже: {len(level_1_bears)}\n\n"
+                f"👉 Улучшите существующих медведей чтобы покупать новых!"
+            )
         
         # Если вариант не указан, выбираем случайный
         if variant is None:
