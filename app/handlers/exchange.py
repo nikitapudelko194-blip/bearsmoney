@@ -146,17 +146,19 @@ async def process_coin_amount(message: Message, state: FSMContext):
                 await message.answer(f"❌ Недостаточно Coins. Доступно: {user.coins:,.0f}")
                 return
             
-            # Calculate TON amount
+            # Calculate TON amount - AUTOMATIC CALCULATION
             rate = settings.COIN_TO_TON_RATE
-            ton_amount = amount * rate
+            ton_amount = amount * rate  # АВТОМАТИЧЕСКИЙ РАСЧЁТ
             coins_per_ton = int(1 / rate)
             
             text = (
                 f"✅ **Подтвердите обмен**\n\n"
-                f"🪙 Отдаёте: {amount:,.0f} Coins\n"
-                f"💎 Получите: {ton_amount:.4f} TON\n\n"
-                f"📈 Курс: 1 TON = {coins_per_ton:,} Coins\n\n"
-                f"💼 Останется:\n"
+                f"🪙 **Отдаёте:** {amount:,.0f} Coins\n"
+                f"💎 **Получите:** {ton_amount:.4f} TON\n\n"
+                f"🧠 **Расчёт:**\n"
+                f"{amount:,.0f} Coins × {rate:.8f} = {ton_amount:.4f} TON\n\n"
+                f"📈 **Курс:** 1 TON = {coins_per_ton:,} Coins\n\n"
+                f"💼 **Останется:**\n"
                 f"├ 🪙 Coins: {user.coins - amount:,.0f}\n"
                 f"└ 💎 TON: {user.ton_balance + ton_amount:.4f}\n"
             )
@@ -321,17 +323,19 @@ async def process_ton_amount(message: Message, state: FSMContext):
                 await message.answer(f"❌ Недостаточно TON. Доступно: {user.ton_balance:.4f}")
                 return
             
-            # Calculate coins amount
+            # Calculate coins amount - AUTOMATIC CALCULATION
             rate = settings.COIN_TO_TON_RATE
-            coins_amount = amount / rate
+            coins_amount = amount / rate  # АВТОМАТИЧЕСКИЙ РАСЧЁТ
             coins_per_ton = int(1 / rate)
             
             text = (
                 f"✅ **Подтвердите обмен**\n\n"
-                f"💎 Отдаёте: {amount:.4f} TON\n"
-                f"🪙 Получите: {coins_amount:,.0f} Coins\n\n"
-                f"📈 Курс: 1 TON = {coins_per_ton:,} Coins\n\n"
-                f"💼 Останется:\n"
+                f"💎 **Отдаёте:** {amount:.4f} TON\n"
+                f"🪙 **Получите:** {coins_amount:,.0f} Coins\n\n"
+                f"🧠 **Расчёт:**\n"
+                f"{amount:.4f} TON ÷ {rate:.8f} = {coins_amount:,.0f} Coins\n\n"
+                f"📈 **Курс:** 1 TON = {coins_per_ton:,} Coins\n\n"
+                f"💼 **Останется:**\n"
                 f"├ 💎 TON: {user.ton_balance - amount:.4f}\n"
                 f"└ 🪙 Coins: {user.coins + coins_amount:,.0f}\n"
             )
