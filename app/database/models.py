@@ -30,7 +30,7 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    bears = relationship('Bear', back_populates='owner')
+    bears = relationship('Bear', back_populates='owner', foreign_keys='Bear.owner_id')
     coins_transactions = relationship('CoinTransaction', back_populates='user')
     withdrawals = relationship('Withdrawal', back_populates='user')
     subscriptions = relationship('Subscription', back_populates='user')
@@ -39,9 +39,9 @@ class User(Base):
     daily_logins = relationship('UserDailyLogin', back_populates='user')
     case_history = relationship('CaseHistory', back_populates='user')
     bear_insurance = relationship('BearInsurance', back_populates='user')
-    p2p_listings = relationship('P2PListing', back_populates='seller')
-    p2p_purchases = relationship('P2PListing', foreign_keys='P2PListing.buyer_id', back_populates='buyer')
-    # Fixed: Use back_populates instead of backref
+    # Fixed: Specify foreign_keys explicitly to avoid ambiguity
+    p2p_listings_as_seller = relationship('P2PListing', back_populates='seller', foreign_keys='P2PListing.seller_id')
+    p2p_listings_as_buyer = relationship('P2PListing', back_populates='buyer', foreign_keys='P2PListing.buyer_id')
     referrals = relationship('User', back_populates='referrer', remote_side=[id])
     referrer = relationship('User', remote_side=[referrer_id], back_populates='referrals')
 
@@ -62,12 +62,13 @@ class Bear(Base):
     boost_until = Column(DateTime, nullable=True)
     total_coins_earned = Column(Float, default=0)  # Статистика дохода
     is_locked = Column(Boolean, default=False)  # Лок от продажи
+    is_on_sale = Column(Boolean, default=False)  # На ли медведь на продаже (P2P)
     purchased_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    owner = relationship('User', back_populates='bears')
+    owner = relationship('User', back_populates='bears', foreign_keys=[owner_id])
     insurance = relationship('BearInsurance', back_populates='bear', uselist=False)
     p2p_listings = relationship('P2PListing', back_populates='bear')
 
@@ -264,7 +265,7 @@ class BearInsurance(Base):
     insurance_type = Column(String(50), default='24h')  # '24h', '48h', 'permanent'
     cost_coins = Column(Float, default=5000)  # Стоимость страховки в коинах
     activated_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime, nullable=True)  # Когда истекает (если не永久)
+    expires_at = Column(DateTime, nullable=True)  # Когда истекает (если не вечна)
     
     # Relationships
     bear = relationship('Bear', back_populates='insurance')
@@ -286,8 +287,8 @@ class P2PListing(Base):
     
     # Relationships
     bear = relationship('Bear', back_populates='p2p_listings')
-    seller = relationship('User', back_populates='p2p_listings', foreign_keys=[seller_id])
-    buyer = relationship('User', back_populates='p2p_purchases', foreign_keys=[buyer_id])
+    seller = relationship('User', back_populates='p2p_listings_as_seller', foreign_keys=[seller_id])
+    buyer = relationship('User', back_populates='p2p_listings_as_buyer', foreign_keys=[buyer_id])
 
 
 class CaseGuarantee(Base):
