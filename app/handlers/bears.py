@@ -194,6 +194,129 @@ async def upgrade_bear(query: CallbackQuery):
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
+# ============ BOOST BEAR ============
+
+@router.callback_query(F.data.startswith("boost_bear:"))
+async def boost_bear(query: CallbackQuery):
+    """
+    Boost bear (temporary power increase).
+    """
+    try:
+        bear_id = int(query.data.split(":")[1])
+        
+        text = (
+            "🔥 **Буст медведя**\n\n"
+            "Временно увеличьте прибыль медведя!\n\n"
+            "⏰ 1 час - 1,000 коинов (+50%)\n"
+            "⏰ 6 часов - 5,000 коинов (+50%)\n"
+            "⏰ 24 часа - 15,000 коинов (+50%)\n\n"
+            "⚠️ Функция в разработке!"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"bear_detail:{bear_id}")],
+        ])
+        
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+        except Exception:
+            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+        
+        await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in boost_bear: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+# ============ RENAME BEAR ============
+
+@router.callback_query(F.data.startswith("rename_bear:"))
+async def rename_bear_start(query: CallbackQuery, state: FSMContext):
+    """
+    Start renaming process.
+    """
+    try:
+        bear_id = int(query.data.split(":")[1])
+        
+        async with get_session() as session:
+            bear_query = select(Bear).where(Bear.id == bear_id)
+            bear_result = await session.execute(bear_query)
+            bear = bear_result.scalar_one_or_none()
+            
+            if not bear:
+                await query.answer("❌ Медведь не найден")
+                return
+            
+            text = (
+                f"📝 **Переименовать медведя**\n\n"
+                f"Текущее имя: {bear.name}\n\n"
+                f"💬 Введите новое имя:\n"
+                f"(от 2 до 20 символов)"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data=f"bear_detail:{bear_id}")],
+            ])
+            
+            await state.set_state(BearStates.waiting_for_rename)
+            await state.update_data(bear_id=bear_id)
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in rename_bear_start: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.message(BearStates.waiting_for_rename)
+async def process_rename(message: Message, state: FSMContext):
+    """
+    Process bear rename.
+    """
+    try:
+        data = await state.get_data()
+        bear_id = data['bear_id']
+        new_name = message.text.strip()
+        
+        # Validate name
+        if len(new_name) < 2 or len(new_name) > 20:
+            await message.answer("❌ Имя должно быть от 2 до 20 символов!")
+            return
+        
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == message.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            bear_query = select(Bear).where(Bear.id == bear_id, Bear.owner_id == user.id)
+            bear_result = await session.execute(bear_query)
+            bear = bear_result.scalar_one_or_none()
+            
+            if not bear:
+                await message.answer("❌ Медведь не найден")
+                await state.clear()
+                return
+            
+            old_name = bear.name
+            bear.name = new_name
+            await session.commit()
+            
+            await message.answer(
+                f"✅ Медведь переименован!\n"
+                f"Было: {old_name}\n"
+                f"Стало: {new_name}"
+            )
+            await state.clear()
+    except Exception as e:
+        logger.error(f"❌ Error in process_rename: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
+        await state.clear()
+
+
 # ============ SELL BEAR TO SYSTEM ============
 
 @router.callback_query(F.data.startswith("sell_bear:"))
@@ -356,6 +479,83 @@ async def process_p2p_price(message: Message, state: FSMContext):
         logger.error(f"❌ Error in process_p2p_price: {e}", exc_info=True)
         await message.answer(f"❌ Ошибка: {str(e)}")
         await state.clear()
+
+
+# ============ P2P MARKET ============
+
+@router.callback_query(F.data == "p2p_market")
+async def p2p_market(query: CallbackQuery):
+    """
+    Show P2P marketplace.
+    """
+    try:
+        async with get_session() as session:
+            listings = await FeaturesService.get_available_listings(session, limit=10)
+            
+            if not listings:
+                text = (
+                    "📊 **P2P Маркетплейс**\n\n"
+                    "На маркете пока нет медведей! 😢\n\n"
+                    "Будьте первым кто выставит медведя на продажу!"
+                )
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="bears")],
+                ])
+            else:
+                text = f"📊 **P2P Маркетплейс** ({len(listings)} лотов)\n\n"
+                
+                for listing in listings:
+                    bear_type_info = BearsService.get_bear_class_info(listing['bear_type'])
+                    text += (
+                        f"{bear_type_info['color']} **{listing['bear_name']}**\n"
+                        f"├ {bear_type_info['rarity']} (Lv{listing['bear_level']})\n"
+                        f"├ 💰 {listing['price_coins']:.0f} коинов\n"
+                        f"└ Продавец: {listing['seller_name']}\n\n"
+                    )
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+                for listing in listings:
+                    keyboard.inline_keyboard.append([
+                        InlineKeyboardButton(
+                            text=f"💰 {listing['bear_name']} - {listing['price_coins']:.0f}к",
+                            callback_data=f"p2p_buy:{listing['listing_id']}"
+                        )
+                    ])
+                keyboard.inline_keyboard.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="bears")])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in p2p_market: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("p2p_buy:"))
+async def p2p_buy_confirm(query: CallbackQuery):
+    """
+    Confirm P2P purchase.
+    """
+    try:
+        listing_id = int(query.data.split(":")[1])
+        
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            try:
+                result = await FeaturesService.buy_bear_from_player(session, listing_id, user.id)
+                await query.answer("✅ Медведь куплен!")
+                await p2p_market(query)
+            except ValueError as e:
+                await query.answer(f"❌ {str(e)}", show_alert=True)
+    except Exception as e:
+        logger.error(f"❌ Error in p2p_buy_confirm: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
 # ============ INSURANCE ============
