@@ -69,7 +69,7 @@ BEAR_NAMES = {
 }
 
 MAX_BEAR_LEVEL = 50
-MAX_BEARS_LEVEL_1 = 10  # Максимум 10 медведей 1-го уровня
+MAX_BEARS_PER_RARITY_LEVEL_1 = 15  # Максимум 15 медведей 1-го уровня КАЖДОЙ РЕДКОСТИ
 
 
 class BearsService:
@@ -182,25 +182,28 @@ class BearsService:
         Create a new bear for user.
         Variant: 1-15 для каждого класса.
         
-        LIMIT: Максимум 10 медведей 1-го уровня.
+        LIMIT: Максимум 15 медведей 1-го уровня КАЖДОЙ редкости.
         """
         if bear_type not in BEAR_CLASSES:
             raise ValueError(f"Invalid bear type: {bear_type}")
         
-        # Проверяем лимит медведей 1-го уровня
+        # Проверяем лимит медведей 1-го уровня ЭТОЙ редкости
         level_1_query = select(Bear).where(
             Bear.owner_id == user_id,
+            Bear.bear_type == bear_type,  # ПРОВЕРЯЕМ ТОЛЬКО ЭТОТ ТИП
             Bear.level == 1,
             Bear.is_on_sale == False
         )
         level_1_result = await session.execute(level_1_query)
         level_1_bears = level_1_result.scalars().all()
         
-        if len(level_1_bears) >= MAX_BEARS_LEVEL_1:
+        if len(level_1_bears) >= MAX_BEARS_PER_RARITY_LEVEL_1:
+            bear_class = BEAR_CLASSES[bear_type]
             raise ValueError(
-                f"⚠️ Лимит медведей 1-го уровня: {MAX_BEARS_LEVEL_1}\n"
+                f"⚠️ Лимит {bear_class['rarity']} медведей 1-го уровня: {MAX_BEARS_PER_RARITY_LEVEL_1}\n"
                 f"У вас уже: {len(level_1_bears)}\n\n"
-                f"👉 Улучшите существующих медведей чтобы покупать новых!"
+                f"👉 Улучшите {bear_class['rarity']} медведей чтобы покупать новых!\n"
+                f"✨ Или покупайте медведей другой редкости!"
             )
         
         # Если вариант не указан, выбираем случайный
