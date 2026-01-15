@@ -34,8 +34,8 @@ async def exchange_menu(query: CallbackQuery):
             user = user_result.scalar_one()
             
             # Exchange rate from config
-            rate = settings.COIN_TO_TON_RATE  # 0.00001 TON per coin
-            coins_per_ton = int(1 / rate)  # 100,000 coins per TON
+            rate = settings.COIN_TO_TON_RATE  # 0.000002 TON per coin
+            coins_per_ton = int(1 / rate)  # 500,000 coins per TON
             
             text = (
                 f"💱 **Обмен валюты**\n\n"
@@ -44,6 +44,7 @@ async def exchange_menu(query: CallbackQuery):
                 f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
                 f"📈 **Курс обмена**\n"
                 f"├ 1 TON = {coins_per_ton:,} Coins\n"
+                f"├ 0.5 TON = {coins_per_ton // 2:,} Coins\n"
                 f"└ 1 Coin = {rate:.8f} TON\n\n"
                 f"⚠️ **Лимиты**\n"
                 f"├ 💰 Мин. обмен: 100 Coins\n"
