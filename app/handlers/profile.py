@@ -25,10 +25,10 @@ def format_premium_status(user: User) -> str:
                 days = time_left.days
                 hours = (time_left.total_seconds() % 86400) // 3600
                 if days > 0:
-                    return f"\n💳 **Премиум активен** ({days}д {hours}ч)"
+                    return f"\n👳 **Премиум активен** ({days}д {hours}ч)"
                 else:
-                    return f"\n💳 **Премиум активен** ({hours}ч)"
-        return "\n💳 **Премиум активен** (бессрочно)"
+                    return f"\n👳 **Премиум активен** ({hours}ч)"
+        return "\n👳 **Премиум активен** (бессрочно)"
     return "\n⭕ Обычный пользователь"
 
 
@@ -80,8 +80,9 @@ async def show_profile(query: CallbackQuery):
                 f"⭐ Уровень: {user.level}\n"
                 f"{format_premium_status(user)}\n\n"
                 f"💰 **Финансы**\n"
-                f"🪙 Баланс: {user.coins:.0f} коинов\n"
-                f"💸 Всего заработано: {total_earned:.0f} коинов\n\n"
+                f"├ 🪙 Баланс: {user.coins:,.0f} коинов\n"
+                f"├ 💎 TON: {user.ton_balance:.4f}\n"
+                f"└ 💸 Всего заработано: {total_earned:,.0f} коинов\n\n"
                 f"🐻 **Медведи** ({total_bears})\n"
             )
             
@@ -165,13 +166,14 @@ async def stats_menu(query: CallbackQuery):
                 f"🎮 **Игровая активность**\n"
                 f"├ 🕐 В игре: {days_in_game} дней\n"
                 f"├ ⭐ Уровень: {user.level}\n"
-                f"└ 💰 Баланс: {user.coins:.0f} коинов\n\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
                 f"🐻 **Коллекция**\n"
                 f"├ 📦 Медведей: {total_bears}\n"
-                f"└ 💰 Доход: {sum(b.coins_per_day for b in bears):.0f} к/день\n\n"
+                f"└ 💰 Доход: {sum(b.coins_per_day for b in bears):,.0f} к/день\n\n"
                 f"👥 **Рефералы**\n"
                 f"├ 👤 Приглашено: {tier1_count} чел.\n"
-                f"└ 💸 Заработано: {total_ref_earnings:.0f} коинов\n\n"
+                f"└ 💸 Заработано: {total_ref_earnings:,.0f} коинов\n\n"
                 f"👉 Выберите категорию:"
             )
             
@@ -244,7 +246,8 @@ async def stats_general(query: CallbackQuery):
             
             text += (
                 f"💰 **Экономика**\n"
-                f"├ 💵 Баланс: {user.coins:.0f} коинов\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"├ 💎 TON: {user.ton_balance:.4f}\n"
                 f"└ ⭐ Уровень: {user.level}\n\n"
                 f"🚀 **Прогресс**\n"
                 f"├ 🎯 Опыт: {user.experience:.0f}\n"
@@ -312,20 +315,23 @@ async def stats_finance(query: CallbackQuery):
             
             text = (
                 f"💰 **Финансовая статистика**\n\n"
+                f"💼 **Текущий баланс**\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
                 f"📈 **Доходы**\n"
-                f"├ 💸 Всего: {total_earned:.0f} коинов\n"
-                f"├ 🐻 От медведей: {daily_income * (datetime.utcnow() - user.created_at).days:.0f} к\n"
-                f"└ 👥 От рефералов: {(user.referral_earnings_tier1 or 0) + (user.referral_earnings_tier2 or 0) + (user.referral_earnings_tier3 or 0):.0f} к\n\n"
+                f"├ 💸 Всего: {total_earned:,.0f} коинов\n"
+                f"├ 🐻 От медведей: {daily_income * (datetime.utcnow() - user.created_at).days:,.0f} к\n"
+                f"└ 👥 От рефералов: {(user.referral_earnings_tier1 or 0) + (user.referral_earnings_tier2 or 0) + (user.referral_earnings_tier3 or 0):,.0f} к\n\n"
                 f"📉 **Расходы**\n"
-                f"├ ❌ Всего: {total_spent:.0f} коинов\n"
-                f"└ 📊 Чистая прибыль: {profit:.0f} к\n\n"
+                f"├ ❌ Всего: {total_spent:,.0f} коинов\n"
+                f"└ 📊 Чистая прибыль: {profit:,.0f} к\n\n"
                 f"⏰ **За периоды**\n"
-                f"├ 📅 Сегодня: +{daily_income:.0f} коинов\n"
-                f"├ 🗓️ За неделю: {week_earnings:.0f} к\n"
-                f"└ 📆 Прогноз/месяц: {daily_income * 30:.0f} к\n\n"
+                f"├ 📅 Сегодня: +{daily_income:,.0f} коинов\n"
+                f"├ 🗓️ За неделю: {week_earnings:,.0f} к\n"
+                f"└ 📆 Прогноз/месяц: {daily_income * 30:,.0f} к\n\n"
                 f"💡 **Эффективность**\n"
                 f"├ 📊 ROI: {(profit/total_spent*100) if total_spent > 0 else 0:.0f}%\n"
-                f"└ 💵 Баланс: {user.coins:.0f} коинов"
+                f"└ 💵 Баланс: {user.coins:,.0f} коинов"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -380,7 +386,7 @@ async def stats_bears(query: CallbackQuery):
                     f"💰 **Производительность**\n"
                     f"├ 💵 Доход/час: {total_income_hour:.1f} к\n"
                     f"├ 📅 Доход/день: {total_income_day:.1f} к\n"
-                    f"└ 📆 Прогноз/месяц: {total_income_day * 30:.0f} к\n\n"
+                    f"└ 📆 Прогноз/месяц: {total_income_day * 30:,.0f} к\n\n"
                     f"🏆 **Топ-5 медведей**\n"
                 )
                 
@@ -466,10 +472,10 @@ async def stats_referrals(query: CallbackQuery):
                 f"├ 🥈 2-й круг: {tier2_count} чел (10%)\n"
                 f"└ 🥉 3-й круг: 0 чел (5%)\n\n"
                 f"💰 **Доходы**\n"
-                f"├ Tier 1: {user.referral_earnings_tier1 or 0:.0f} к\n"
-                f"├ Tier 2: {user.referral_earnings_tier2 or 0:.0f} к\n"
-                f"├ Tier 3: {user.referral_earnings_tier3 or 0:.0f} к\n"
-                f"└ 💸 Всего: {total_earnings:.0f} коинов\n\n"
+                f"├ Tier 1: {user.referral_earnings_tier1 or 0:,.0f} к\n"
+                f"├ Tier 2: {user.referral_earnings_tier2 or 0:,.0f} к\n"
+                f"├ Tier 3: {user.referral_earnings_tier3 or 0:,.0f} к\n"
+                f"└ 💸 Всего: {total_earnings:,.0f} коинов\n\n"
             )
             
             if tier1_users:
@@ -570,15 +576,17 @@ async def finance_stats(query: CallbackQuery):
             
             text = (
                 f"💰 **Финансовая статистика**\n\n"
+                f"💼 **Текущий баланс**\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
                 f"💸 **Общая информация**\n"
-                f"🪙 Текущий баланс: {user.coins:.0f} коинов\n"
-                f"✅ Всего заработано: {total_earned:.0f} коинов\n"
-                f"❌ Всего потрачено: {total_spent:.0f} коинов\n"
-                f"📊 Чистый доход: {total_profit:.0f} коинов\n\n"
+                f"✅ Всего заработано: {total_earned:,.0f} коинов\n"
+                f"❌ Всего потрачено: {total_spent:,.0f} коинов\n"
+                f"📊 Чистый доход: {total_profit:,.0f} коинов\n\n"
                 f"📈 **Ежедневный доход**\n"
                 f"📅 От медведей: {total_income_per_day:.1f} коинов/день\n"
-                f"🕐 За неделю: {earned_week:.0f} коинов\n"
-                f"📆 Прогноз в месяц: {total_income_per_day * 30:.0f} коинов\n\n"
+                f"🕐 За неделю: {earned_week:,.0f} коинов\n"
+                f"📆 Прогноз в месяц: {total_income_per_day * 30:,.0f} коинов\n\n"
                 f"💡 **Совет**\n"
                 f"Купи больше медведей и улучши их уровни, чтобы увеличить доход!\n"
             )
