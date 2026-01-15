@@ -17,7 +17,7 @@ router = Router()
 TON_PACKAGES = {
     'package_0.5': {
         'ton_amount': 0.5,
-        'stars': 50,
+        'stars': 200,  # Increased from 50
         'rub': 250,
         'ton_crypto': 0.5,
         'name': '0.5 TON',
@@ -25,7 +25,7 @@ TON_PACKAGES = {
     },
     'package_1.0': {
         'ton_amount': 1.0,
-        'stars': 100,
+        'stars': 400,  # Increased from 100
         'rub': 500,
         'ton_crypto': 1.0,
         'name': '1.0 TON',
@@ -33,7 +33,7 @@ TON_PACKAGES = {
     },
     'package_2.5': {
         'ton_amount': 2.5,
-        'stars': 250,
+        'stars': 1000,  # Increased from 250
         'rub': 1250,
         'ton_crypto': 2.5,
         'name': '2.5 TON',
@@ -41,7 +41,7 @@ TON_PACKAGES = {
     },
     'package_5.0': {
         'ton_amount': 5.0,
-        'stars': 500,
+        'stars': 2000,  # Increased from 500
         'rub': 2500,
         'ton_crypto': 5.0,
         'name': '5.0 TON',
@@ -49,7 +49,7 @@ TON_PACKAGES = {
     },
     'package_10.0': {
         'ton_amount': 10.0,
-        'stars': 1000,
+        'stars': 4000,  # Increased from 1000
         'rub': 5000,
         'ton_crypto': 10.0,
         'name': '10.0 TON',
@@ -79,11 +79,11 @@ async def buy_ton_menu(query: CallbackQuery):
                 f"💼 **Ваш баланс**\n"
                 f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
                 f"💎 **Выберите пакет:**\n\n"
-                f"🪙 **0.5 TON** - 50 ⭐ / 250₽\n"
-                f"💎 **1.0 TON** - 100 ⭐ / 500₽\n"
-                f"💎💎 **2.5 TON** - 250 ⭐ / 1,250₽\n"
-                f"💠 **5.0 TON** - 500 ⭐ / 2,500₽\n"
-                f"💰 **10.0 TON** - 1,000 ⭐ / 5,000₽\n\n"
+                f"🪙 **0.5 TON** - 200 ⭐ / 250₽\n"
+                f"💎 **1.0 TON** - 400 ⭐ / 500₽\n"
+                f"💎💎 **2.5 TON** - 1,000 ⭐ / 1,250₽\n"
+                f"💠 **5.0 TON** - 2,000 ⭐ / 2,500₽\n"
+                f"💰 **10.0 TON** - 4,000 ⭐ / 5,000₽\n\n"
                 f"💡 Выберите пакет для продолжения:"
             )
             
@@ -125,7 +125,7 @@ async def select_package(query: CallbackQuery):
             f"{package['emoji']} **Пакет: {package['name']}**\n\n"
             f"💎 Получите: **{package['ton_amount']} TON**\n\n"
             f"💳 **Выберите способ оплаты:**\n\n"
-            f"⭐ **Telegram Stars** - {package['stars']} Stars\n"
+            f"⭐ **Telegram Stars** - {package['stars']:,} Stars\n"
             f"• Оплата внутри Telegram\n"
             f"• Мгновенное зачисление\n\n"
             f"💎 **TON Wallet** - {package['ton_crypto']} TON\n"
@@ -137,7 +137,7 @@ async def select_package(query: CallbackQuery):
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"⭐ {package['stars']} Stars", callback_data=f"pay_stars:{package_id}")],
+            [InlineKeyboardButton(text=f"⭐ {package['stars']:,} Stars", callback_data=f"pay_stars:{package_id}")],
             [InlineKeyboardButton(text=f"💎 {package['ton_crypto']} TON", callback_data=f"pay_ton:{package_id}")],
             [InlineKeyboardButton(text=f"💳 {package['rub']}₽", callback_data=f"pay_rub:{package_id}")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_ton")],
@@ -249,7 +249,7 @@ async def process_successful_payment(message: Message):
                 user_id=user.id,
                 amount=ton_amount,
                 transaction_type='purchase_stars',
-                description=f'Покупка {package["name"]} за {package["stars"]} Stars (+{ton_amount} TON)'
+                description=f'Покупка {package["name"]} за {package["stars"]:,} Stars (+{ton_amount} TON)'
             )
             session.add(transaction)
             
@@ -259,7 +259,7 @@ async def process_successful_payment(message: Message):
             text = (
                 f"✅ **Платёж успешен!**\n\n"
                 f"💎 **Начислено:** {ton_amount} TON\n"
-                f"⭐ **Оплачено:** {package['stars']} Stars\n\n"
+                f"⭐ **Оплачено:** {package['stars']:,} Stars\n\n"
                 f"💼 **Новый баланс:** {user.ton_balance:.4f} TON\n\n"
                 f"🎉 Спасибо за покупку!"
             )
@@ -272,7 +272,7 @@ async def process_successful_payment(message: Message):
             
             await message.answer(text, reply_markup=keyboard, parse_mode="markdown")
             
-            logger.info(f"✅ Payment successful: User {user_id} purchased {ton_amount} TON for {package['stars']} Stars")
+            logger.info(f"✅ Payment successful: User {user_id} purchased {ton_amount} TON for {package['stars']:,} Stars")
             
     except Exception as e:
         logger.error(f"❌ Error in process_successful_payment: {e}", exc_info=True)
