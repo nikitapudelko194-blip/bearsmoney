@@ -99,32 +99,33 @@ EPIC_CASE_LOOT = [
     ('bear', 'legendary:3', 'legendary', 15),
 ]
 
-# Loot table for legendary cases (TON) - BALANCED
+# Loot table for legendary cases (TON) - REBALANCED (VARIANT 1)
 # COST: 5 TON (~$25-50)
+# FOCUS: More coins, less bears!
 LEGENDARY_CASE_LOOT = [
-    # TON rewards - BALANCED
-    ('ton', 1.0, 'rare', 200),        # Same (11.0%)
-    ('ton', 2.0, 'epic', 73),         # REDUCED from 120 (6.6% → 4.0%)
-    ('empty', 0, 'empty', 328),       # INCREASED from 250 (13.7% → 18.0%)
-    # COINS - BALANCED
-    ('coins', 10000, 'epic', 91),     # REDUCED from 150 (8.2% → 5.0%)
-    ('coins', 20000, 'epic', 46),     # REDUCED from 80 (4.4% → 2.5%)
-    # Many legendary bears - SLIGHTLY REDUCED
-    ('bear', 'legendary:1', 'legendary', 60),   # REDUCED from 70
-    ('bear', 'legendary:2', 'legendary', 70),   # REDUCED from 80
-    ('bear', 'legendary:3', 'legendary', 65),   # REDUCED from 75
-    ('bear', 'legendary:4', 'legendary', 60),   # REDUCED from 70
-    ('bear', 'legendary:5', 'legendary', 70),   # REDUCED from 80
-    ('bear', 'legendary:6', 'legendary', 60),   # REDUCED from 70
-    ('bear', 'legendary:7', 'legendary', 55),   # REDUCED from 65
-    ('bear', 'legendary:8', 'legendary', 70),   # REDUCED from 80
-    ('bear', 'legendary:9', 'legendary', 60),   # REDUCED from 70
-    ('bear', 'legendary:10', 'legendary', 65),  # REDUCED from 75
-    ('bear', 'legendary:11', 'legendary', 60),  # REDUCED from 70
-    ('bear', 'legendary:12', 'legendary', 55),  # REDUCED from 65
-    ('bear', 'legendary:13', 'legendary', 50),  # REDUCED from 60
-    ('bear', 'legendary:14', 'legendary', 45),  # REDUCED from 55
-    ('bear', 'legendary:15', 'legendary', 40),  # REDUCED from 50
+    # TON rewards - UNCHANGED
+    ('ton', 1.0, 'rare', 200),        # 11.0% (unchanged)
+    ('ton', 2.0, 'epic', 73),         # 4.0% (unchanged)
+    ('empty', 0, 'empty', 328),       # 18.0% (unchanged)
+    # COINS - SIGNIFICANTLY INCREASED!
+    ('coins', 10000, 'epic', 273),    # INCREASED from 91 (5.0% → 15.0%) ⬆️ +200%
+    ('coins', 20000, 'epic', 182),    # INCREASED from 46 (2.5% → 10.0%) ⬆️ +300%
+    # Legendary bears - REDUCED (all weights ~40% less)
+    ('bear', 'legendary:1', 'legendary', 36),   # REDUCED from 60
+    ('bear', 'legendary:2', 'legendary', 42),   # REDUCED from 70
+    ('bear', 'legendary:3', 'legendary', 39),   # REDUCED from 65
+    ('bear', 'legendary:4', 'legendary', 36),   # REDUCED from 60
+    ('bear', 'legendary:5', 'legendary', 42),   # REDUCED from 70
+    ('bear', 'legendary:6', 'legendary', 36),   # REDUCED from 60
+    ('bear', 'legendary:7', 'legendary', 33),   # REDUCED from 55
+    ('bear', 'legendary:8', 'legendary', 42),   # REDUCED from 70
+    ('bear', 'legendary:9', 'legendary', 36),   # REDUCED from 60
+    ('bear', 'legendary:10', 'legendary', 39),  # REDUCED from 65
+    ('bear', 'legendary:11', 'legendary', 36),  # REDUCED from 60
+    ('bear', 'legendary:12', 'legendary', 33),  # REDUCED from 55
+    ('bear', 'legendary:13', 'legendary', 30),  # REDUCED from 50
+    ('bear', 'legendary:14', 'legendary', 27),  # REDUCED from 45
+    ('bear', 'legendary:15', 'legendary', 24),  # REDUCED from 40
 ]
 
 LOOT_TABLES = {
