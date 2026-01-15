@@ -24,8 +24,14 @@ class User(Base):
     is_premium = Column(Boolean, default=False)
     premium_until = Column(DateTime, nullable=True)
     wallet_address = Column(String(255), nullable=True)
-    referrer_id = Column(Integer, ForeignKey('users.id'), nullable=True)
-    referred_count = Column(Integer, default=0)
+    
+    # Реферальная система
+    referred_by = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)  # Кто пригласил
+    referred_count = Column(Integer, default=0)  # Сколько людей пригласил
+    referral_earnings_level1 = Column(Float, default=0)  # Заработок с 1 круга
+    referral_earnings_level2 = Column(Float, default=0)  # Заработок со 2 круга
+    referral_earnings_level3 = Column(Float, default=0)  # Заработок с 3 круга
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -42,8 +48,9 @@ class User(Base):
     # Fixed: Specify foreign_keys explicitly to avoid ambiguity
     p2p_listings_as_seller = relationship('P2PListing', back_populates='seller', foreign_keys='P2PListing.seller_id')
     p2p_listings_as_buyer = relationship('P2PListing', back_populates='buyer', foreign_keys='P2PListing.buyer_id')
-    referrals = relationship('User', back_populates='referrer', remote_side=[id])
-    referrer = relationship('User', remote_side=[referrer_id], back_populates='referrals')
+    
+    # Реферальная система: связь с реферером и рефералами
+    referrer = relationship('User', remote_side=[id], foreign_keys=[referred_by], backref='referrals')
 
 
 class Bear(Base):
