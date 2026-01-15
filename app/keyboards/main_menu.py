@@ -7,30 +7,31 @@ def get_main_menu() -> InlineKeyboardMarkup:
     Get main menu keyboard.
     """
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        # Row 1
+        # Row 1 - Core gameplay
         [
             InlineKeyboardButton(text="🐻 Мои медведи", callback_data="bears"),
             InlineKeyboardButton(text="🛍️ Магазин", callback_data="shop"),
         ],
-        # Row 2 - ДОБАВЛЕНА P2P КНОПКА!
+        # Row 2 - Activities
         [
             InlineKeyboardButton(text="🎁 Ящики", callback_data="cases"),
             InlineKeyboardButton(text="📊 P2P Маркет", callback_data="p2p_market"),
             InlineKeyboardButton(text="📋 Квесты", callback_data="quests"),
         ],
-        # Row 3
+        # Row 3 - Finance
+        [
+            InlineKeyboardButton(text="💱 Обмен", callback_data="exchange"),
+            InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw"),
+        ],
+        # Row 4 - Social & Stats
         [
             InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
             InlineKeyboardButton(text="📈 Статистика", callback_data="stats"),
         ],
-        # Row 4
-        [
-            InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw"),
-            InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
-        ],
-        # Row 5
+        # Row 5 - Account
         [
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
         ],
     ])
     return keyboard
