@@ -35,10 +35,10 @@ class Settings:
     LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
     
     # Game Economy
-    MIN_WITHDRAW: float = float(os.getenv('MIN_WITHDRAW', '0.1'))
+    MIN_WITHDRAW: float = float(os.getenv('MIN_WITHDRAW', '0.5'))  # Минимальный вывод 0.5 TON
     MAX_WITHDRAW: float = float(os.getenv('MAX_WITHDRAW', '100'))
     WITHDRAW_COMMISSION: float = float(os.getenv('WITHDRAW_COMMISSION', '0.02'))
-    COIN_TO_TON_RATE: float = float(os.getenv('COIN_TO_TON_RATE', '0.001'))
+    COIN_TO_TON_RATE: float = float(os.getenv('COIN_TO_TON_RATE', '0.00001'))  # 1 TON = 100,000 Coins
     
     # Channel Task
     CHANNEL_ID: str = os.getenv('CHANNEL_ID', '')
