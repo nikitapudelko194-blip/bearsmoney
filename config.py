@@ -37,7 +37,7 @@ class Settings:
     # Game Economy
     MIN_WITHDRAW: float = float(os.getenv('MIN_WITHDRAW', '1.0'))  # Минимальный вывод 1 TON
     MAX_WITHDRAW: float = float(os.getenv('MAX_WITHDRAW', '100'))
-    WITHDRAW_COMMISSION: float = float(os.getenv('WITHDRAW_COMMISSION', '0.02'))  # Комиссия 2% (0.02)
+    WITHDRAW_COMMISSION: float = float(os.getenv('WITHDRAW_COMMISSION', '0.05'))  # Комиссия 5% (0.05)
     COIN_TO_TON_RATE: float = float(os.getenv('COIN_TO_TON_RATE', '0.000002'))  # 1 TON = 500,000 Coins (0.5 TON = 250,000 Coins)
     
     # Channel Task
