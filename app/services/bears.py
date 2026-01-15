@@ -80,14 +80,14 @@ class BearsService:
         """
         Get bear stats for a specific variant.
         Each variant is 8% more expensive and generates 8% more income.
-        HARDER ECONOMY: Base prices increased 1.5x, base income reduced 20%.
+        BALANCED ECONOMY: Prices reduced 20%, income increased 40% for better retention.
         """
         base_stats = {
-            # Цены увеличены 1.5x, доход уменьшен 20%
-            'common': {'cost': 750, 'income': 0.32, 'sell': 300},  # было 500/0.4/200
-            'rare': {'cost': 4500, 'income': 1.2, 'sell': 1500},  # было 3000/1.5/1000
-            'epic': {'cost': 22500, 'income': 4.0, 'sell': 7500},  # было 15000/5.0/5000
-            'legendary': {'cost': 150000, 'income': 12.0, 'sell': 60000},  # было 100000/15.0/40000
+            # СБАЛАНСИРОВАННАЯ ЭКОНОМИКА (доступнее + быстрее прогресс)
+            'common': {'cost': 600, 'income': 0.45, 'sell': 240},      # было 750/0.32/300
+            'rare': {'cost': 3600, 'income': 1.7, 'sell': 1200},       # было 4500/1.2/1500
+            'epic': {'cost': 18000, 'income': 5.6, 'sell': 6000},      # было 22500/4.0/7500
+            'legendary': {'cost': 120000, 'income': 16.8, 'sell': 48000},  # было 150000/12.0/60000
         }
         
         if bear_type not in base_stats:
@@ -112,24 +112,24 @@ class BearsService:
         Calculate upgrade cost for a bear based on its class.
         Cost depends on both level AND bear rarity class.
         
-        HARDER ECONOMY:
-        - Base cost increased: 500 → 1000 (2x more expensive)
-        - Growth rate increased: 1.15 → 1.20 per level (faster exponential growth)
+        BALANCED ECONOMY:
+        - Base cost: 1000 (challenging but achievable)
+        - Growth rate: 1.18 per level (reduced from 1.20 for fairness)
         
-        Common:    Level 1→2: 1000 coins (was 500)
-        Rare:      Level 1→2: 3000 coins (was 1500)
-        Epic:      Level 1→2: 10000 coins (was 5000)
-        Legendary: Level 1→2: 30000 coins (was 15000)
+        Common:    Level 1→2: 1000 coins
+        Rare:      Level 1→2: 3000 coins
+        Epic:      Level 1→2: 10000 coins
+        Legendary: Level 1→2: 30000 coins
         """
-        # Базовая стоимость улучшения (УВЕЛИЧЕНА 2x)
-        base_cost = 1000  # было 500
+        # Базовая стоимость улучшения
+        base_cost = 1000
         
         # Коэффициент по классу редкости
         bear_class = BEAR_CLASSES.get(bear_type, BEAR_CLASSES['common'])
         class_multiplier = bear_class['upgrade_multiplier']
         
-        # Экспоненциальный рост с уровнем (БЫСТРЕЕ РОСТ)
-        level_multiplier = 1.20 ** (level - 1)  # было 1.15
+        # Экспоненциальный рост с уровнем (УМЕРЕННЫЙ)
+        level_multiplier = 1.18 ** (level - 1)  # было 1.20, теперь 1.18
         
         return int(base_cost * class_multiplier * level_multiplier)
     
@@ -137,7 +137,7 @@ class BearsService:
     def get_bear_income_for_level(base_income: float, level: int) -> float:
         """
         Calculate income for a given level.
-        HARDER ECONOMY: Even MORE diminishing returns (3% per level instead of 5%).
+        BALANCED: 3% per level (fair progression).
         
         Level 1: base income
         Level 2: base income * 1.03
@@ -145,10 +145,10 @@ class BearsService:
         Level 4: base income * 1.0927
         etc.
         
-        Much slower income growth compared to cost growth!
+        Slower than cost growth but reasonable!
         """
-        # Меньший мультипликатор дохода (3% вместо 5%)
-        return base_income * (1.03 ** (level - 1))  # было 1.05
+        # Рост дохода 3% за уровень (оставляем как есть - сбалансирован)
+        return base_income * (1.03 ** (level - 1))
     
     @staticmethod
     async def get_user_bears(session: AsyncSession, user_id: int) -> list[Bear]:
