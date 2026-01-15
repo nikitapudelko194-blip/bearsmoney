@@ -78,16 +78,17 @@ RARE_CASE_LOOT = [
     ('bear', 'rare:8', 'rare', 10),
 ]
 
-# Loot table for epic cases (TON) - NOW WITH COINS AND BEARS
+# Loot table for epic cases (TON) - BALANCED
+# COST: 1 TON (~$5-10)
 EPIC_CASE_LOOT = [
-    # TON rewards
-    ('ton', 0.1, 'common', 250),
-    ('ton', 0.5, 'common', 150),
-    ('ton', 1.0, 'rare', 80),
-    ('empty', 0, 'empty', 350),  # More pity
-    # COINS (new!)
-    ('coins', 5000, 'rare', 150),
-    ('coins', 10000, 'epic', 80),
+    # TON rewards - BALANCED
+    ('ton', 0.1, 'common', 290),      # INCREASED from 250 (17.2% → 20.0%)
+    ('ton', 0.5, 'common', 150),      # Same (10.3%)
+    ('ton', 1.0, 'rare', 50),         # REDUCED from 80 (5.5% → 3.5%)
+    ('empty', 0, 'empty', 415),       # INCREASED from 350 (24.1% → 28.6%)
+    # COINS - BALANCED
+    ('coins', 5000, 'rare', 150),     # Same (10.3%)
+    ('coins', 10000, 'epic', 45),     # REDUCED from 80 (5.5% → 3.0%)
     # Epic bears
     ('bear', 'epic:1', 'epic', 80),
     ('bear', 'epic:3', 'epic', 70),
@@ -98,31 +99,32 @@ EPIC_CASE_LOOT = [
     ('bear', 'legendary:3', 'legendary', 15),
 ]
 
-# Loot table for legendary cases (TON) - UPDATED COINS
+# Loot table for legendary cases (TON) - BALANCED
+# COST: 5 TON (~$25-50)
 LEGENDARY_CASE_LOOT = [
-    # TON rewards
-    ('ton', 1.0, 'rare', 200),
-    ('ton', 2.0, 'epic', 120),
-    ('empty', 0, 'empty', 250),  # More pity
-    # COINS (UPDATED!) - 10000 and 20000
-    ('coins', 10000, 'epic', 150),
-    ('coins', 20000, 'epic', 80),
-    # Many legendary bears - ALL VARIANTS
-    ('bear', 'legendary:1', 'legendary', 70),
-    ('bear', 'legendary:2', 'legendary', 80),
-    ('bear', 'legendary:3', 'legendary', 75),
-    ('bear', 'legendary:4', 'legendary', 70),
-    ('bear', 'legendary:5', 'legendary', 80),
-    ('bear', 'legendary:6', 'legendary', 70),
-    ('bear', 'legendary:7', 'legendary', 65),
-    ('bear', 'legendary:8', 'legendary', 80),
-    ('bear', 'legendary:9', 'legendary', 70),
-    ('bear', 'legendary:10', 'legendary', 75),
-    ('bear', 'legendary:11', 'legendary', 70),
-    ('bear', 'legendary:12', 'legendary', 65),
-    ('bear', 'legendary:13', 'legendary', 60),
-    ('bear', 'legendary:14', 'legendary', 55),
-    ('bear', 'legendary:15', 'legendary', 50),
+    # TON rewards - BALANCED
+    ('ton', 1.0, 'rare', 200),        # Same (11.0%)
+    ('ton', 2.0, 'epic', 73),         # REDUCED from 120 (6.6% → 4.0%)
+    ('empty', 0, 'empty', 328),       # INCREASED from 250 (13.7% → 18.0%)
+    # COINS - BALANCED
+    ('coins', 10000, 'epic', 91),     # REDUCED from 150 (8.2% → 5.0%)
+    ('coins', 20000, 'epic', 46),     # REDUCED from 80 (4.4% → 2.5%)
+    # Many legendary bears - SLIGHTLY REDUCED
+    ('bear', 'legendary:1', 'legendary', 60),   # REDUCED from 70
+    ('bear', 'legendary:2', 'legendary', 70),   # REDUCED from 80
+    ('bear', 'legendary:3', 'legendary', 65),   # REDUCED from 75
+    ('bear', 'legendary:4', 'legendary', 60),   # REDUCED from 70
+    ('bear', 'legendary:5', 'legendary', 70),   # REDUCED from 80
+    ('bear', 'legendary:6', 'legendary', 60),   # REDUCED from 70
+    ('bear', 'legendary:7', 'legendary', 55),   # REDUCED from 65
+    ('bear', 'legendary:8', 'legendary', 70),   # REDUCED from 80
+    ('bear', 'legendary:9', 'legendary', 60),   # REDUCED from 70
+    ('bear', 'legendary:10', 'legendary', 65),  # REDUCED from 75
+    ('bear', 'legendary:11', 'legendary', 60),  # REDUCED from 70
+    ('bear', 'legendary:12', 'legendary', 55),  # REDUCED from 65
+    ('bear', 'legendary:13', 'legendary', 50),  # REDUCED from 60
+    ('bear', 'legendary:14', 'legendary', 45),  # REDUCED from 55
+    ('bear', 'legendary:15', 'legendary', 40),  # REDUCED from 50
 ]
 
 LOOT_TABLES = {
