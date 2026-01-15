@@ -110,20 +110,24 @@ class BearsService:
         Calculate upgrade cost for a bear based on its class.
         Cost depends on both level AND bear rarity class.
         
-        Common:    Level 1->2: 500 coins
-        Rare:      Level 1->2: 1500 coins (3x)
-        Epic:      Level 1->2: 5000 coins (10x)
-        Legendary: Level 1->2: 15000 coins (30x)
+        HARDER ECONOMY:
+        - Base cost increased: 500 → 1000 (2x more expensive)
+        - Growth rate increased: 1.15 → 1.20 per level (faster exponential growth)
+        
+        Common:    Level 1→2: 1000 coins (was 500)
+        Rare:      Level 1→2: 3000 coins (was 1500)
+        Epic:      Level 1→2: 10000 coins (was 5000)
+        Legendary: Level 1→2: 30000 coins (was 15000)
         """
-        # Базовая стоимость улучшения
-        base_cost = 500
+        # Базовая стоимость улучшения (УВЕЛИЧЕНА 2x)
+        base_cost = 1000  # было 500
         
         # Коэффициент по классу редкости
         bear_class = BEAR_CLASSES.get(bear_type, BEAR_CLASSES['common'])
         class_multiplier = bear_class['upgrade_multiplier']
         
-        # Экспоненциальный рост с уровнем
-        level_multiplier = 1.15 ** (level - 1)
+        # Экспоненциальный рост с уровнем (БЫСТРЕЕ РОСТ)
+        level_multiplier = 1.20 ** (level - 1)  # было 1.15
         
         return int(base_cost * class_multiplier * level_multiplier)
     
@@ -131,15 +135,18 @@ class BearsService:
     def get_bear_income_for_level(base_income: float, level: int) -> float:
         """
         Calculate income for a given level.
-        HARDER ECONOMY: Even more diminishing returns (5% per level instead of 8%).
+        HARDER ECONOMY: Even MORE diminishing returns (3% per level instead of 5%).
+        
         Level 1: base income
-        Level 2: base income * 1.05
-        Level 3: base income * 1.1025
-        Level 4: base income * 1.1576
+        Level 2: base income * 1.03
+        Level 3: base income * 1.0609
+        Level 4: base income * 1.0927
         etc.
+        
+        Much slower income growth compared to cost growth!
         """
-        # Меньший мультипликатор дохода (5% вместо 8%)
-        return base_income * (1.05 ** (level - 1))
+        # Меньший мультипликатор дохода (3% вместо 5%)
+        return base_income * (1.03 ** (level - 1))  # было 1.05
     
     @staticmethod
     async def get_user_bears(session: AsyncSession, user_id: int) -> list[Bear]:
