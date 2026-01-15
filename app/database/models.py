@@ -28,9 +28,9 @@ class User(Base):
     # Реферальная система
     referred_by = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)  # Кто пригласил
     referred_count = Column(Integer, default=0)  # Сколько людей пригласил
-    referral_earnings_level1 = Column(Float, default=0)  # Заработок с 1 круга
-    referral_earnings_level2 = Column(Float, default=0)  # Заработок со 2 круга
-    referral_earnings_level3 = Column(Float, default=0)  # Заработок с 3 круга
+    referral_earnings_tier1 = Column(Float, default=0)  # Заработок с 1 круга (20%)
+    referral_earnings_tier2 = Column(Float, default=0)  # Заработок со 2 круга (10%)
+    referral_earnings_tier3 = Column(Float, default=0)  # Заработок с 3 круга (5%)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
