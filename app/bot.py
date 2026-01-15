@@ -23,13 +23,14 @@ def setup_handlers():
     """
     try:
         # Import handlers
-        from app.handlers import start, bears, shop, profile, admin, cases
+        from app.handlers import start, bears, shop, profile, admin, cases, exchange
         
         # Register routers
         dp.include_router(start.router)
         dp.include_router(bears.router)
         dp.include_router(shop.router)
         dp.include_router(profile.router)
+        dp.include_router(exchange.router)
         dp.include_router(admin.router)
         dp.include_router(cases.router)
         
