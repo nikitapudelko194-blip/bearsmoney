@@ -23,7 +23,7 @@ def setup_handlers():
     """
     try:
         # Import handlers
-        from app.handlers import start, bears, shop, profile, admin, cases, exchange
+        from app.handlers import start, bears, shop, profile, admin, cases, exchange, payment
         
         # Register routers
         dp.include_router(start.router)
@@ -31,6 +31,7 @@ def setup_handlers():
         dp.include_router(shop.router)
         dp.include_router(profile.router)
         dp.include_router(exchange.router)
+        dp.include_router(payment.router)  # Payment system
         dp.include_router(admin.router)
         dp.include_router(cases.router)
         
