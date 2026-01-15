@@ -12,9 +12,10 @@ def get_main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🐻 Мои медведи", callback_data="bears"),
             InlineKeyboardButton(text="🛍️ Магазин", callback_data="shop"),
         ],
-        # Row 2
+        # Row 2 - ДОБАВЛЕНА P2P КНОПКА!
         [
             InlineKeyboardButton(text="🎁 Ящики", callback_data="cases"),
+            InlineKeyboardButton(text="📊 P2P Маркет", callback_data="p2p_market"),
             InlineKeyboardButton(text="📋 Квесты", callback_data="quests"),
         ],
         # Row 3
