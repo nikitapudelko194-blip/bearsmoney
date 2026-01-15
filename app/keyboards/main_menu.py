@@ -23,12 +23,16 @@ def get_main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="💱 Обмен", callback_data="exchange"),
             InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw"),
         ],
-        # Row 4 - Social & Stats
+        # Row 4 - Buy TON
+        [
+            InlineKeyboardButton(text="💳 Купить TON", callback_data="buy_ton"),
+        ],
+        # Row 5 - Social & Stats
         [
             InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
             InlineKeyboardButton(text="📈 Статистика", callback_data="stats"),
         ],
-        # Row 5 - Account
+        # Row 6 - Account
         [
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
             InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
