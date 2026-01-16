@@ -1,6 +1,7 @@
-"""Payment handlers for TON purchases."""
+"""Payment handlers for TON and Coins purchases."""
 import logging
 from decimal import Decimal
+from datetime import datetime
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
@@ -8,17 +9,19 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, CoinTransaction
-from datetime import datetime
 import hashlib
 
 logger = logging.getLogger(__name__)
 router = Router()
 
+# ADMIN ID - замените на ваш Telegram ID
+ADMIN_ID = 810540896  # TODO: Замените на свой ID!
+
 # TON packages with prices
 TON_PACKAGES = {
     'package_0.5': {
         'ton_amount': 0.5,
-        'stars': 200,  # Increased from 50
+        'stars': 200,
         'rub': 250,
         'ton_crypto': 0.5,
         'name': '0.5 TON',
@@ -26,7 +29,7 @@ TON_PACKAGES = {
     },
     'package_1.0': {
         'ton_amount': 1.0,
-        'stars': 400,  # Increased from 100
+        'stars': 400,
         'rub': 500,
         'ton_crypto': 1.0,
         'name': '1.0 TON',
@@ -34,7 +37,7 @@ TON_PACKAGES = {
     },
     'package_2.5': {
         'ton_amount': 2.5,
-        'stars': 1000,  # Increased from 250
+        'stars': 1000,
         'rub': 1250,
         'ton_crypto': 2.5,
         'name': '2.5 TON',
@@ -42,7 +45,7 @@ TON_PACKAGES = {
     },
     'package_5.0': {
         'ton_amount': 5.0,
-        'stars': 2000,  # Increased from 500
+        'stars': 2000,
         'rub': 2500,
         'ton_crypto': 5.0,
         'name': '5.0 TON',
@@ -50,7 +53,7 @@ TON_PACKAGES = {
     },
     'package_10.0': {
         'ton_amount': 10.0,
-        'stars': 4000,  # Increased from 1000
+        'stars': 4000,
         'rub': 5000,
         'ton_crypto': 10.0,
         'name': '10.0 TON',
@@ -58,11 +61,88 @@ TON_PACKAGES = {
     },
 }
 
+# Coins packages with prices (100 Stars = 1000 Coins, т.е. 1 Star = 10 Coins)
+COINS_PACKAGES = {
+    'coins_1k': {
+        'coins_amount': 1000,
+        'stars': 100,
+        'name': '1,000 Coins',
+        'emoji': '🪙'
+    },
+    'coins_5k': {
+        'coins_amount': 5000,
+        'stars': 500,
+        'name': '5,000 Coins',
+        'emoji': '💰'
+    },
+    'coins_10k': {
+        'coins_amount': 10000,
+        'stars': 1000,
+        'name': '10,000 Coins',
+        'emoji': '💵'
+    },
+    'coins_25k': {
+        'coins_amount': 25000,
+        'stars': 2500,
+        'name': '25,000 Coins',
+        'emoji': '💸'
+    },
+    'coins_50k': {
+        'coins_amount': 50000,
+        'stars': 5000,
+        'name': '50,000 Coins',
+        'emoji': '🤑'
+    },
+}
+
+# Temporary storage for pending TON payments
+# В продакшене лучше использовать Redis или базу данных
+pending_ton_payments = {}
+
 
 class PaymentStates(StatesGroup):
     """States for payment flow."""
     waiting_for_ton_address = State()
 
+
+# ============ MAIN PAYMENT MENU ============
+
+@router.callback_query(F.data == "payments")
+async def payments_menu(query: CallbackQuery):
+    """
+    Main payments menu - choose what to buy.
+    """
+    try:
+        text = (
+            f"💳 **Магазин**\n\n"
+            f"💎 **TON** - игровая валюта для премиум функций\n"
+            f"• Открытие премиум кейсов\n"
+            f"• Особые возможности\n\n"
+            f"🪙 **Coins** - основная валюта\n"
+            f"• Покупка медведей\n"
+            f"• Улучшение уровней\n"
+            f"• Ускорения\n\n"
+            f"👇 **Выберите что купить:**"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💎 Купить TON", callback_data="buy_ton")],
+            [InlineKeyboardButton(text="🪙 Купить Coins", callback_data="buy_coins")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
+        ])
+        
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+        except Exception:
+            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+        
+        await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in payments_menu: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+# ============ TON PURCHASE ============
 
 @router.callback_query(F.data == "buy_ton")
 async def buy_ton_menu(query: CallbackQuery):
@@ -76,7 +156,7 @@ async def buy_ton_menu(query: CallbackQuery):
             user = user_result.scalar_one()
             
             text = (
-                f"💳 **Купить TON**\n\n"
+                f"💎 **Купить TON**\n\n"
                 f"💼 **Ваш баланс**\n"
                 f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
                 f"💎 **Выберите пакет:**\n\n"
@@ -94,7 +174,7 @@ async def buy_ton_menu(query: CallbackQuery):
                 [InlineKeyboardButton(text="💎💎 2.5 TON", callback_data="select_package:package_2.5")],
                 [InlineKeyboardButton(text="💠 5.0 TON", callback_data="select_package:package_5.0")],
                 [InlineKeyboardButton(text="💰 10.0 TON", callback_data="select_package:package_10.0")],
-                [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="payments")],
             ])
             
             try:
@@ -131,7 +211,7 @@ async def select_package(query: CallbackQuery):
             f"• Мгновенное зачисление\n\n"
             f"💎 **TON Wallet** - {package['ton_crypto']} TON\n"
             f"• Оплата криптовалютой\n"
-            f"• Зачисление 1-5 мин\n\n"
+            f"• Подтверждение администратором\n\n"
             f"💳 **Банковская карта** - {package['rub']}₽\n"
             f"• Оплата российскими рублями\n"
             f"• Зачисление 1-2 мин"
@@ -155,12 +235,12 @@ async def select_package(query: CallbackQuery):
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-# ============ TELEGRAM STARS PAYMENT ============
+# ============ TELEGRAM STARS PAYMENT (TON) ============
 
 @router.callback_query(F.data.startswith("pay_stars:"))
 async def pay_with_stars(query: CallbackQuery):
     """
-    Create Telegram Stars invoice.
+    Create Telegram Stars invoice for TON.
     """
     try:
         package_id = query.data.split(":")[1]
@@ -211,17 +291,37 @@ async def process_pre_checkout(pre_checkout_query: PreCheckoutQuery):
 @router.message(F.successful_payment)
 async def process_successful_payment(message: Message):
     """
-    Handle successful payment.
+    Handle successful payment (TON or Coins).
     """
     try:
         payload = message.successful_payment.invoice_payload
-        
-        # Parse payload: ton_stars_package_0.5_123456789
         parts = payload.split("_")
-        if len(parts) < 4 or parts[0] != "ton" or parts[1] != "stars":
+        
+        if len(parts) < 4:
             logger.error(f"Invalid payload: {payload}")
             return
         
+        payment_type = parts[0]  # 'ton' or 'coins'
+        payment_method = parts[1]  # 'stars'
+        
+        if payment_type == "ton":
+            await process_ton_stars_payment(message, payload)
+        elif payment_type == "coins":
+            await process_coins_stars_payment(message, payload)
+        else:
+            logger.error(f"Unknown payment type: {payment_type}")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in process_successful_payment: {e}", exc_info=True)
+
+
+async def process_ton_stars_payment(message: Message, payload: str):
+    """
+    Process TON purchase via Stars.
+    """
+    try:
+        # Parse payload: ton_stars_package_0.5_123456789
+        parts = payload.split("_")
         package_id = f"{parts[2]}_{parts[3]}"
         user_id = int(parts[4])
         
@@ -242,7 +342,7 @@ async def process_successful_payment(message: Message):
                 logger.error(f"User not found: {user_id}")
                 return
             
-            # Add TON - convert to Decimal for precision
+            # Add TON
             user.ton_balance += Decimal(str(ton_amount))
             
             # Log transaction
@@ -253,7 +353,6 @@ async def process_successful_payment(message: Message):
                 description=f'Покупка {package["name"]} за {package["stars"]:,} Stars (+{ton_amount} TON)'
             )
             session.add(transaction)
-            
             await session.commit()
             
             # Success message
@@ -272,19 +371,18 @@ async def process_successful_payment(message: Message):
             ])
             
             await message.answer(text, reply_markup=keyboard, parse_mode="markdown")
-            
-            logger.info(f"✅ Payment successful: User {user_id} purchased {ton_amount} TON for {package['stars']:,} Stars")
+            logger.info(f"✅ TON Payment: User {user_id} purchased {ton_amount} TON for {package['stars']:,} Stars")
             
     except Exception as e:
-        logger.error(f"❌ Error in process_successful_payment: {e}", exc_info=True)
+        logger.error(f"❌ Error in process_ton_stars_payment: {e}", exc_info=True)
 
 
-# ============ TON WALLET PAYMENT ============
+# ============ TON WALLET PAYMENT WITH ADMIN CONFIRMATION ============
 
 @router.callback_query(F.data.startswith("pay_ton:"))
 async def pay_with_ton_wallet(query: CallbackQuery):
     """
-    Pay with TON cryptocurrency.
+    Pay with TON cryptocurrency - manual confirmation.
     """
     try:
         package_id = query.data.split(":")[1]
@@ -294,12 +392,18 @@ async def pay_with_ton_wallet(query: CallbackQuery):
             return
         
         package = TON_PACKAGES[package_id]
-        
-        # Real TON wallet address for receiving payments
         deposit_address = "UQBLaN9mzDOTceNlEGqo5JCjjWi8deYPYddGFzG_CqF4zXXg"
-        
-        # Generate payment memo (comment)
         payment_memo = f"USER_{query.from_user.id}_{package_id}"
+        
+        # Save to pending payments
+        payment_id = f"{query.from_user.id}_{int(datetime.now().timestamp())}"
+        pending_ton_payments[payment_id] = {
+            'user_id': query.from_user.id,
+            'package_id': package_id,
+            'ton_amount': package['ton_crypto'],
+            'status': 'pending',
+            'created_at': datetime.now()
+        }
         
         text = (
             f"💎 **Оплата TON**\n\n"
@@ -312,13 +416,13 @@ async def pay_with_ton_wallet(query: CallbackQuery):
             f"⚠️ **Важно:**\n"
             f"• Обязательно укажите комментарий!\n"
             f"• Отправьте точную сумму: {package['ton_crypto']} TON\n"
-            f"• Зачисление после 1-5 подтверждений\n\n"
+            f"• После отправки нажмите кнопку ниже\n\n"
             f"🔍 **Статус:** Ожидаем платёж...\n\n"
-            f"💬 Помощь: @support (TODO: add support contact)"
+            f"👇 После отправки TON нажмите кнопку:"
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Проверить платёж", callback_data=f"check_ton_payment:{package_id}")],
+            [InlineKeyboardButton(text="✅ Подтвердить платёж", callback_data=f"confirm_ton:{payment_id}")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"select_package:{package_id}")],
         ])
         
@@ -337,26 +441,410 @@ async def pay_with_ton_wallet(query: CallbackQuery):
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("check_ton_payment:"))
-async def check_ton_payment(query: CallbackQuery):
+@router.callback_query(F.data.startswith("confirm_ton:"))
+async def confirm_ton_payment(query: CallbackQuery):
     """
-    Check TON payment status (placeholder).
+    User confirms they sent TON - notify admin.
     """
-    # TODO: Implement blockchain transaction checking
-    await query.answer(
-        "🔍 Проверка платежа...\n\n"
-        "🚧 Функция в разработке.\n"
-        "Платёж будет обработан автоматически в течение 5 минут.",
-        show_alert=True
-    )
+    try:
+        payment_id = query.data.split(":")[1]
+        
+        if payment_id not in pending_ton_payments:
+            await query.answer("❌ Платёж не найден", show_alert=True)
+            return
+        
+        payment = pending_ton_payments[payment_id]
+        
+        if payment['status'] != 'pending':
+            await query.answer("⚠️ Этот платёж уже обработан", show_alert=True)
+            return
+        
+        # Update status
+        payment['status'] = 'waiting_confirmation'
+        
+        # Get user info
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == payment['user_id'])
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            package = TON_PACKAGES[payment['package_id']]
+            
+            # Notify admin
+            admin_text = (
+                f"🔔 **Новый платёж TON**\n\n"
+                f"👤 **Пользователь:** {user.first_name}\n"
+                f"🆔 **ID:** `{user.telegram_id}`\n"
+                f"📦 **Пакет:** {package['name']}\n"
+                f"💎 **Сумма:** {package['ton_crypto']} TON\n\n"
+                f"📝 **Комментарий:**\n"
+                f"`USER_{user.telegram_id}_{payment['package_id']}`\n\n"
+                f"⏰ **Время:** {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"💳 **Проверьте транзакцию и подтвердите:**"
+            )
+            
+            admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"admin_approve:{payment_id}")],
+                [InlineKeyboardButton(text="❌ Отклонить", callback_data=f"admin_reject:{payment_id}")],
+            ])
+            
+            try:
+                await query.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=admin_text,
+                    reply_markup=admin_keyboard,
+                    parse_mode="markdown"
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify admin: {e}")
+            
+            # Notify user
+            user_text = (
+                f"✅ **Заявка отправлена!**\n\n"
+                f"💎 Ваша заявка на пополнение {package['name']} отправлена администратору.\n\n"
+                f"⏳ Платёж будет проверен в течение нескольких минут.\n"
+                f"🔔 Вы получите уведомление после проверки.\n\n"
+                f"Спасибо за ожидание!"
+            )
+            
+            await query.message.edit_text(user_text, parse_mode="markdown")
+            await query.answer("✅ Заявка отправлена администратору!")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in confirm_ton_payment: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-# ============ BANK CARD PAYMENT (YOOKASSA) ============
+@router.callback_query(F.data.startswith("admin_approve:"))
+async def admin_approve_payment(query: CallbackQuery):
+    """
+    Admin approves TON payment.
+    """
+    try:
+        payment_id = query.data.split(":")[1]
+        
+        if payment_id not in pending_ton_payments:
+            await query.answer("❌ Платёж не найден", show_alert=True)
+            return
+        
+        payment = pending_ton_payments[payment_id]
+        
+        if payment['status'] == 'approved':
+            await query.answer("✅ Платёж уже одобрен", show_alert=True)
+            return
+        
+        # Credit TON to user
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == payment['user_id'])
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one_or_none()
+            
+            if not user:
+                await query.answer("❌ Пользователь не найден", show_alert=True)
+                return
+            
+            package = TON_PACKAGES[payment['package_id']]
+            ton_amount = payment['ton_amount']
+            
+            # Add TON
+            user.ton_balance += Decimal(str(ton_amount))
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=ton_amount,
+                transaction_type='purchase_ton_wallet',
+                description=f'Покупка {package["name"]} через TON Wallet (+{ton_amount} TON)'
+            )
+            session.add(transaction)
+            await session.commit()
+            
+            # Update status
+            payment['status'] = 'approved'
+            
+            # Notify user
+            user_text = (
+                f"✅ **Платёж подтверждён!**\n\n"
+                f"💎 **Начислено:** {ton_amount} TON\n"
+                f"💼 **Новый баланс:** {float(user.ton_balance):.4f} TON\n\n"
+                f"🎉 Спасибо за покупку!"
+            )
+            
+            user_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🎰 Открыть кейсы", callback_data="cases")],
+                [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
+            ])
+            
+            try:
+                await query.bot.send_message(
+                    chat_id=payment['user_id'],
+                    text=user_text,
+                    reply_markup=user_keyboard,
+                    parse_mode="markdown"
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify user: {e}")
+            
+            # Update admin message
+            await query.message.edit_text(
+                f"{query.message.text}\n\n✅ **ОДОБРЕНО** @{query.from_user.username or 'admin'}",
+                parse_mode="markdown"
+            )
+            
+            await query.answer("✅ Платёж одобрен! TON начислен пользователю.")
+            logger.info(f"✅ Admin approved TON payment: {payment_id}")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in admin_approve_payment: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("admin_reject:"))
+async def admin_reject_payment(query: CallbackQuery):
+    """
+    Admin rejects TON payment.
+    """
+    try:
+        payment_id = query.data.split(":")[1]
+        
+        if payment_id not in pending_ton_payments:
+            await query.answer("❌ Платёж не найден", show_alert=True)
+            return
+        
+        payment = pending_ton_payments[payment_id]
+        
+        if payment['status'] == 'rejected':
+            await query.answer("❌ Платёж уже отклонён", show_alert=True)
+            return
+        
+        # Update status
+        payment['status'] = 'rejected'
+        
+        # Notify user
+        user_text = (
+            f"❌ **Платёж отклонён**\n\n"
+            f"К сожалению, ваш платёж не был подтверждён.\n\n"
+            f"Возможные причины:\n"
+            f"• Неверная сумма\n"
+            f"• Отсутствие комментария\n"
+            f"• Неверный адрес\n\n"
+            f"Пожалуйста, попробуйте ещё раз или обратитесь в поддержку."
+        )
+        
+        try:
+            await query.bot.send_message(
+                chat_id=payment['user_id'],
+                text=user_text,
+                parse_mode="markdown"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify user: {e}")
+        
+        # Update admin message
+        await query.message.edit_text(
+            f"{query.message.text}\n\n❌ **ОТКЛОНЕНО** @{query.from_user.username or 'admin'}",
+            parse_mode="markdown"
+        )
+        
+        await query.answer("❌ Платёж отклонён. Пользователь уведомлён.")
+        logger.info(f"❌ Admin rejected TON payment: {payment_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error in admin_reject_payment: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+# ============ COINS PURCHASE ============
+
+@router.callback_query(F.data == "buy_coins")
+async def buy_coins_menu(query: CallbackQuery):
+    """
+    Show Coins purchase menu with packages.
+    """
+    try:
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            text = (
+                f"🪙 **Купить Coins**\n\n"
+                f"💼 **Ваш баланс**\n"
+                f"└ 🪙 Coins: {user.coins:,.0f}\n\n"
+                f"💰 **Выберите пакет:**\n\n"
+                f"🪙 **1,000 Coins** - 100 ⭐\n"
+                f"💰 **5,000 Coins** - 500 ⭐\n"
+                f"💵 **10,000 Coins** - 1,000 ⭐\n"
+                f"💸 **25,000 Coins** - 2,500 ⭐\n"
+                f"🤑 **50,000 Coins** - 5,000 ⭐\n\n"
+                f"💡 1 Star = 10 Coins\n\n"
+                f"👇 Выберите пакет:"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🪙 1,000 Coins", callback_data="select_coins:coins_1k")],
+                [InlineKeyboardButton(text="💰 5,000 Coins", callback_data="select_coins:coins_5k")],
+                [InlineKeyboardButton(text="💵 10,000 Coins", callback_data="select_coins:coins_10k")],
+                [InlineKeyboardButton(text="💸 25,000 Coins", callback_data="select_coins:coins_25k")],
+                [InlineKeyboardButton(text="🤑 50,000 Coins", callback_data="select_coins:coins_50k")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="payments")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in buy_coins_menu: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("select_coins:"))
+async def select_coins_package(query: CallbackQuery):
+    """
+    Show confirmation for Coins package.
+    """
+    try:
+        package_id = query.data.split(":")[1]
+        
+        if package_id not in COINS_PACKAGES:
+            await query.answer("❌ Неизвестный пакет", show_alert=True)
+            return
+        
+        package = COINS_PACKAGES[package_id]
+        
+        text = (
+            f"{package['emoji']} **Пакет: {package['name']}**\n\n"
+            f"🪙 Получите: **{package['coins_amount']:,} Coins**\n"
+            f"⭐ Стоимость: **{package['stars']:,} Stars**\n\n"
+            f"💳 **Способ оплаты:**\n"
+            f"• Telegram Stars\n"
+            f"• Мгновенное зачисление\n\n"
+            f"👇 Нажмите для оплаты:"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"⭐ Оплатить {package['stars']:,} Stars", callback_data=f"pay_coins_stars:{package_id}")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins")],
+        ])
+        
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+        except Exception:
+            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+        
+        await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in select_coins_package: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("pay_coins_stars:"))
+async def pay_coins_with_stars(query: CallbackQuery):
+    """
+    Create Telegram Stars invoice for Coins.
+    """
+    try:
+        package_id = query.data.split(":")[1]
+        
+        if package_id not in COINS_PACKAGES:
+            await query.answer("❌ Неизвестный пакет", show_alert=True)
+            return
+        
+        package = COINS_PACKAGES[package_id]
+        
+        # Create invoice
+        prices = [LabeledPrice(label=package['name'], amount=package['stars'])]
+        
+        await query.bot.send_invoice(
+            chat_id=query.from_user.id,
+            title=f"Покупка {package['name']}",
+            description=f"Пополнение баланса на {package['coins_amount']:,} Coins",
+            payload=f"coins_stars_{package_id}_{query.from_user.id}",
+            provider_token="",  # Empty for Telegram Stars
+            currency="XTR",
+            prices=prices,
+            max_tip_amount=0,
+            suggested_tip_amounts=[],
+        )
+        
+        await query.answer("💳 Инвойс отправлен!")
+        
+    except Exception as e:
+        logger.error(f"❌ Error in pay_coins_with_stars: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+async def process_coins_stars_payment(message: Message, payload: str):
+    """
+    Process Coins purchase via Stars.
+    """
+    try:
+        # Parse payload: coins_stars_coins_1k_123456789
+        parts = payload.split("_")
+        package_id = f"{parts[2]}_{parts[3]}"
+        user_id = int(parts[4])
+        
+        if package_id not in COINS_PACKAGES:
+            logger.error(f"Unknown package: {package_id}")
+            return
+        
+        package = COINS_PACKAGES[package_id]
+        coins_amount = package['coins_amount']
+        
+        # Credit Coins to user
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == user_id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one_or_none()
+            
+            if not user:
+                logger.error(f"User not found: {user_id}")
+                return
+            
+            # Add Coins
+            user.coins += coins_amount
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=coins_amount,
+                transaction_type='purchase_stars',
+                description=f'Покупка {package["name"]} за {package["stars"]:,} Stars (+{coins_amount:,} Coins)'
+            )
+            session.add(transaction)
+            await session.commit()
+            
+            # Success message
+            text = (
+                f"✅ **Платёж успешен!**\n\n"
+                f"🪙 **Начислено:** {coins_amount:,} Coins\n"
+                f"⭐ **Оплачено:** {package['stars']:,} Stars\n\n"
+                f"💼 **Новый баланс:** {user.coins:,.0f} Coins\n\n"
+                f"🎉 Спасибо за покупку!"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🐻 Купить медведей", callback_data="bears")],
+                [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
+                [InlineKeyboardButton(text="⬅️ В меню", callback_data="main_menu")],
+            ])
+            
+            await message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            logger.info(f"✅ Coins Payment: User {user_id} purchased {coins_amount:,} Coins for {package['stars']:,} Stars")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in process_coins_stars_payment: {e}", exc_info=True)
+
+
+# ============ BANK CARD PAYMENT (YOOKASSA) - PLACEHOLDER ============
 
 @router.callback_query(F.data.startswith("pay_rub:"))
 async def pay_with_card(query: CallbackQuery):
     """
-    Pay with bank card (rubles via YooKassa).
+    Pay with bank card (rubles via YooKassa) - coming soon.
     """
     try:
         package_id = query.data.split(":")[1]
@@ -366,10 +854,6 @@ async def pay_with_card(query: CallbackQuery):
             return
         
         package = TON_PACKAGES[package_id]
-        
-        # TODO: Create YooKassa payment
-        # For now, showing placeholder
-        payment_url = f"https://example.com/payment/{query.from_user.id}/{package_id}"
         
         text = (
             f"💳 **Оплата банковской картой**\n\n"
@@ -388,7 +872,6 @@ async def pay_with_card(query: CallbackQuery):
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            # [InlineKeyboardButton(text="💳 Оплатить", url=payment_url)],  # TODO: uncomment when ready
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"select_package:{package_id}")],
         ])
         
