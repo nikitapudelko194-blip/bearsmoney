@@ -1,5 +1,6 @@
 """Payment handlers for TON purchases."""
 import logging
+from decimal import Decimal
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
@@ -77,7 +78,7 @@ async def buy_ton_menu(query: CallbackQuery):
             text = (
                 f"💳 **Купить TON**\n\n"
                 f"💼 **Ваш баланс**\n"
-                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
+                f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
                 f"💎 **Выберите пакет:**\n\n"
                 f"🪙 **0.5 TON** - 200 ⭐ / 250₽\n"
                 f"💎 **1.0 TON** - 400 ⭐ / 500₽\n"
@@ -241,8 +242,8 @@ async def process_successful_payment(message: Message):
                 logger.error(f"User not found: {user_id}")
                 return
             
-            # Add TON
-            user.ton_balance += ton_amount
+            # Add TON - convert to Decimal for precision
+            user.ton_balance += Decimal(str(ton_amount))
             
             # Log transaction
             transaction = CoinTransaction(
@@ -260,7 +261,7 @@ async def process_successful_payment(message: Message):
                 f"✅ **Платёж успешен!**\n\n"
                 f"💎 **Начислено:** {ton_amount} TON\n"
                 f"⭐ **Оплачено:** {package['stars']:,} Stars\n\n"
-                f"💼 **Новый баланс:** {user.ton_balance:.4f} TON\n\n"
+                f"💼 **Новый баланс:** {float(user.ton_balance):.4f} TON\n\n"
                 f"🎉 Спасибо за покупку!"
             )
             
