@@ -1,6 +1,7 @@
 """Handlers for coin-TON exchange and withdrawals."""
 import logging
 import re
+from decimal import Decimal
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -48,7 +49,7 @@ async def exchange_menu(query: CallbackQuery):
                 f"💱 **Обмен валюты**\n\n"
                 f"💼 **Ваши балансы**\n"
                 f"├ 🪙 Coins: {user.coins:,.0f}\n"
-                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
+                f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
                 f"📈 **Курс обмена**\n"
                 f"├ 1 TON = {coins_per_ton:,} Coins\n"
                 f"├ 0.5 TON = {coins_per_ton // 2:,} Coins\n"
@@ -156,6 +157,7 @@ async def process_coin_amount(message: Message, state: FSMContext):
             # Calculate TON amount - AUTOMATIC CALCULATION
             rate = settings.COIN_TO_TON_RATE
             ton_amount = amount * rate
+            ton_amount_decimal = Decimal(str(ton_amount))  # Convert to Decimal for arithmetic
             coins_per_ton = int(1 / rate)
             
             text = (
@@ -167,7 +169,7 @@ async def process_coin_amount(message: Message, state: FSMContext):
                 f"📈 **Курс:** 1 TON = {coins_per_ton:,} Coins\n\n"
                 f"💼 **Останется:**\n"
                 f"├ 🪙 Coins: {user.coins - amount:,.0f}\n"
-                f"└ 💎 TON: {user.ton_balance + ton_amount:.4f}\n"
+                f"└ 💎 TON: {float(user.ton_balance + ton_amount_decimal):.4f}\n"
             )
             
             # Store data in state
@@ -214,9 +216,10 @@ async def confirm_coins_to_ton(query: CallbackQuery, state: FSMContext):
                 await state.clear()
                 return
             
-            # Execute exchange
+            # Execute exchange - Convert to Decimal
+            ton_amount_decimal = Decimal(str(ton_amount))
             user.coins -= coin_amount
-            user.ton_balance += ton_amount
+            user.ton_balance += ton_amount_decimal
             
             # Log transaction
             transaction_spend = CoinTransaction(
@@ -235,7 +238,7 @@ async def confirm_coins_to_ton(query: CallbackQuery, state: FSMContext):
                 f"💎 Получено: {ton_amount:.4f} TON\n\n"
                 f"💼 **Новые балансы**\n"
                 f"├ 🪙 Coins: {user.coins:,.0f}\n"
-                f"└ 💎 TON: {user.ton_balance:.4f}\n"
+                f"└ 💎 TON: {float(user.ton_balance):.4f}\n"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -270,7 +273,7 @@ async def start_exchange_ton_to_coins(query: CallbackQuery, state: FSMContext):
             
             min_ton = 0.01
             
-            if user.ton_balance < min_ton:
+            if float(user.ton_balance) < min_ton:
                 await query.answer(f"❌ Минимальная сумма: {min_ton} TON", show_alert=True)
                 return
             
@@ -279,10 +282,10 @@ async def start_exchange_ton_to_coins(query: CallbackQuery, state: FSMContext):
             
             text = (
                 f"💎 → 🪙 **Обмен TON на Coins**\n\n"
-                f"💼 Ваш баланс: {user.ton_balance:.4f} TON\n"
+                f"💼 Ваш баланс: {float(user.ton_balance):.4f} TON\n"
                 f"📈 Курс: 1 TON = {coins_per_ton:,} Coins\n\n"
                 f"⚠️ Минимум: {min_ton} TON\n"
-                f"📊 Максимум: {user.ton_balance:.4f} TON\n\n"
+                f"📊 Максимум: {float(user.ton_balance):.4f} TON\n\n"
                 f"📝 Введите количество TON для обмена:"
             )
             
@@ -326,8 +329,10 @@ async def process_ton_amount(message: Message, state: FSMContext):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
-            if amount > user.ton_balance:
-                await message.answer(f"❌ Недостаточно TON. Доступно: {user.ton_balance:.4f}")
+            amount_decimal = Decimal(str(amount))
+            
+            if user.ton_balance < amount_decimal:
+                await message.answer(f"❌ Недостаточно TON. Доступно: {float(user.ton_balance):.4f}")
                 return
             
             # Calculate coins amount - AUTOMATIC CALCULATION
@@ -343,7 +348,7 @@ async def process_ton_amount(message: Message, state: FSMContext):
                 f"{amount:.4f} TON ÷ {rate:.8f} = {coins_amount:,.0f} Coins\n\n"
                 f"📈 **Курс:** 1 TON = {coins_per_ton:,} Coins\n\n"
                 f"💼 **Останется:**\n"
-                f"├ 💎 TON: {user.ton_balance - amount:.4f}\n"
+                f"├ 💎 TON: {float(user.ton_balance - amount_decimal):.4f}\n"
                 f"└ 🪙 Coins: {user.coins + coins_amount:,.0f}\n"
             )
             
@@ -385,14 +390,16 @@ async def confirm_ton_to_coins(query: CallbackQuery, state: FSMContext):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
+            ton_amount_decimal = Decimal(str(ton_amount))
+            
             # Double check balance
-            if user.ton_balance < ton_amount:
+            if user.ton_balance < ton_amount_decimal:
                 await query.answer("❌ Недостаточно TON", show_alert=True)
                 await state.clear()
                 return
             
             # Execute exchange
-            user.ton_balance -= ton_amount
+            user.ton_balance -= ton_amount_decimal
             user.coins += coins_amount
             
             # Log transaction
@@ -411,7 +418,7 @@ async def confirm_ton_to_coins(query: CallbackQuery, state: FSMContext):
                 f"💎 Отдано: {ton_amount:.4f} TON\n"
                 f"🪙 Получено: {coins_amount:,.0f} Coins\n\n"
                 f"💼 **Новые балансы**\n"
-                f"├ 💎 TON: {user.ton_balance:.4f}\n"
+                f"├ 💎 TON: {float(user.ton_balance):.4f}\n"
                 f"└ 🪙 Coins: {user.coins:,.0f}\n"
             )
             
@@ -505,12 +512,12 @@ async def withdraw_menu(query: CallbackQuery):
             commission = settings.WITHDRAW_COMMISSION * 100  # Convert to percentage
             
             # Check if user has enough balance
-            can_withdraw = user.ton_balance >= min_withdraw
+            can_withdraw = float(user.ton_balance) >= min_withdraw
             
             text = (
                 f"💸 **Вывод средств**\n\n"
                 f"💼 **Ваш баланс**\n"
-                f"└ 💎 TON: {user.ton_balance:.4f}\n\n"
+                f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
                 f"⚠️ **Условия вывода**\n"
                 f"├ 💵 Минимум: {min_withdraw} TON\n"
                 f"├ 📊 Комиссия: {commission:.0f}%\n"
@@ -537,7 +544,7 @@ async def withdraw_menu(query: CallbackQuery):
                     [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
                 ])
             else:
-                needed = min_withdraw - user.ton_balance
+                needed = min_withdraw - float(user.ton_balance)
                 text += (
                     f"❌ **Недостаточно средств**\n\n"
                     f"Нужно ещё: {needed:.4f} TON\n\n"
@@ -627,12 +634,12 @@ async def process_ton_address(message: Message, state: FSMContext):
             user = user_result.scalar_one()
             
             min_withdraw = settings.MIN_WITHDRAW
-            max_withdraw = user.ton_balance
+            max_withdraw = float(user.ton_balance)
             
             text = (
                 f"✅ **Адрес принят**\n\n"
                 f"🔑 Кошелёк: `{address}`\n\n"
-                f"💼 **Ваш баланс:** {user.ton_balance:.4f} TON\n"
+                f"💼 **Ваш баланс:** {float(user.ton_balance):.4f} TON\n"
                 f"💵 **Минимум:** {min_withdraw} TON\n"
                 f"📊 **Максимум:** {max_withdraw:.4f} TON\n\n"
                 f"💸 **Введите сумму для вывода:**"
@@ -671,10 +678,12 @@ async def process_withdraw_amount(message: Message, state: FSMContext):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
-            if amount > user.ton_balance:
+            amount_decimal = Decimal(str(amount))
+            
+            if user.ton_balance < amount_decimal:
                 await message.answer(
                     f"❌ **Недостаточно средств**\n\n"
-                    f"Доступно: {user.ton_balance:.4f} TON",
+                    f"Доступно: {float(user.ton_balance):.4f} TON",
                     parse_mode="markdown"
                 )
                 return
@@ -694,7 +703,7 @@ async def process_withdraw_amount(message: Message, state: FSMContext):
                 f"├ 💵 Сумма: {amount:.4f} TON\n"
                 f"├ 📉 Комиссия ({settings.WITHDRAW_COMMISSION * 100:.0f}%): {commission:.4f} TON\n"
                 f"└ 💰 **Получите: {receive_amount:.4f} TON**\n\n"
-                f"💼 **Останется на балансе:** {user.ton_balance - amount:.4f} TON\n\n"
+                f"💼 **Останется на балансе:** {float(user.ton_balance - amount_decimal):.4f} TON\n\n"
                 f"⏱️ **Время обработки:** 1-24 часа\n\n"
                 f"⚠️ Проверьте все данные!"
             )
@@ -743,14 +752,16 @@ async def confirm_withdraw(query: CallbackQuery, state: FSMContext):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
+            withdraw_amount_decimal = Decimal(str(withdraw_amount))
+            
             # Double check balance
-            if user.ton_balance < withdraw_amount:
+            if user.ton_balance < withdraw_amount_decimal:
                 await query.answer("❌ Недостаточно средств", show_alert=True)
                 await state.clear()
                 return
             
             # Execute withdrawal
-            user.ton_balance -= withdraw_amount
+            user.ton_balance -= withdraw_amount_decimal
             
             # Log transaction
             transaction = CoinTransaction(
@@ -793,7 +804,7 @@ async def confirm_withdraw(query: CallbackQuery, state: FSMContext):
                 f"├ 💰 Сумма: {receive_amount:.4f} TON\n"
                 f"├ 🔑 Кошелёк: `{ton_address[:10]}...`\n"
                 f"└ ⏱️ Статус: Обрабатывается\n\n"
-                f"💼 **Новый баланс:** {user.ton_balance:.4f} TON\n\n"
+                f"💼 **Новый баланс:** {float(user.ton_balance):.4f} TON\n\n"
                 f"⏱️ Средства поступят на ваш кошелёк в течение 1-24 часов.\n\n"
                 f"📊 Вы можете проверить статус в 'Истории выводов'."
             )
