@@ -9,6 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, CoinTransaction
+from config import settings
 import hashlib
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,40 @@ COINS_PACKAGES = {
         'stars': 5000,
         'name': '50,000 Coins',
         'emoji': '🤑'
+    },
+}
+
+# Coins packages for TON (using exchange rate from config)
+COINS_TON_PACKAGES = {
+    'coins_ton_100k': {
+        'coins_amount': 100000,
+        'ton_amount': 0.2,
+        'name': '100,000 Coins',
+        'emoji': '💰'
+    },
+    'coins_ton_250k': {
+        'coins_amount': 250000,
+        'ton_amount': 0.5,
+        'name': '250,000 Coins',
+        'emoji': '💵'
+    },
+    'coins_ton_500k': {
+        'coins_amount': 500000,
+        'ton_amount': 1.0,
+        'name': '500,000 Coins',
+        'emoji': '💸'
+    },
+    'coins_ton_1250k': {
+        'coins_amount': 1250000,
+        'ton_amount': 2.5,
+        'name': '1,250,000 Coins',
+        'emoji': '🤑'
+    },
+    'coins_ton_2500k': {
+        'coins_amount': 2500000,
+        'ton_amount': 5.0,
+        'name': '2,500,000 Coins',
+        'emoji': '💎'
     },
 }
 
@@ -670,6 +705,42 @@ async def buy_coins_menu(query: CallbackQuery):
             text = (
                 f"🪙 **Купить Coins**\n\n"
                 f"💼 **Ваш баланс**\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
+                f"💡 **Выберите способ покупки:**"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⭐ Купить за Stars", callback_data="buy_coins_stars")],
+                [InlineKeyboardButton(text="💎 Купить за TON", callback_data="buy_coins_ton")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="payments")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in buy_coins_menu: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "buy_coins_stars")
+async def buy_coins_stars_menu(query: CallbackQuery):
+    """
+    Show Coins packages for Stars.
+    """
+    try:
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            text = (
+                f"⭐ **Купить Coins за Stars**\n\n"
+                f"💼 **Ваш баланс**\n"
                 f"└ 🪙 Coins: {user.coins:,.0f}\n\n"
                 f"💰 **Выберите пакет:**\n\n"
                 f"🪙 **1,000 Coins** - 100 ⭐\n"
@@ -687,7 +758,7 @@ async def buy_coins_menu(query: CallbackQuery):
                 [InlineKeyboardButton(text="💵 10,000 Coins", callback_data="select_coins:coins_10k")],
                 [InlineKeyboardButton(text="💸 25,000 Coins", callback_data="select_coins:coins_25k")],
                 [InlineKeyboardButton(text="🤑 50,000 Coins", callback_data="select_coins:coins_50k")],
-                [InlineKeyboardButton(text="⬅️ Назад", callback_data="payments")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins")],
             ])
             
             try:
@@ -697,14 +768,64 @@ async def buy_coins_menu(query: CallbackQuery):
             
             await query.answer()
     except Exception as e:
-        logger.error(f"❌ Error in buy_coins_menu: {e}", exc_info=True)
+        logger.error(f"❌ Error in buy_coins_stars_menu: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "buy_coins_ton")
+async def buy_coins_ton_menu(query: CallbackQuery):
+    """
+    Show Coins packages for TON.
+    """
+    try:
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            # Calculate exchange rate
+            rate = settings.COIN_TO_TON_RATE
+            coins_per_ton = int(1 / rate)
+            
+            text = (
+                f"💎 **Купить Coins за TON**\n\n"
+                f"💼 **Ваш баланс**\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
+                f"📈 **Курс:** 1 TON = {coins_per_ton:,} Coins\n\n"
+                f"💰 **Выберите пакет:**\n\n"
+                f"💰 **100,000 Coins** - 0.2 TON\n"
+                f"💵 **250,000 Coins** - 0.5 TON\n"
+                f"💸 **500,000 Coins** - 1.0 TON\n"
+                f"🤑 **1,250,000 Coins** - 2.5 TON\n"
+                f"💎 **2,500,000 Coins** - 5.0 TON\n\n"
+                f"👇 Выберите пакет:"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💰 100,000 Coins", callback_data="select_coins_ton:coins_ton_100k")],
+                [InlineKeyboardButton(text="💵 250,000 Coins", callback_data="select_coins_ton:coins_ton_250k")],
+                [InlineKeyboardButton(text="💸 500,000 Coins", callback_data="select_coins_ton:coins_ton_500k")],
+                [InlineKeyboardButton(text="🤑 1,250,000 Coins", callback_data="select_coins_ton:coins_ton_1250k")],
+                [InlineKeyboardButton(text="💎 2,500,000 Coins", callback_data="select_coins_ton:coins_ton_2500k")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer()
+    except Exception as e:
+        logger.error(f"❌ Error in buy_coins_ton_menu: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("select_coins:"))
 async def select_coins_package(query: CallbackQuery):
     """
-    Show confirmation for Coins package.
+    Show confirmation for Coins package (Stars).
     """
     try:
         package_id = query.data.split(":")[1]
@@ -727,7 +848,7 @@ async def select_coins_package(query: CallbackQuery):
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=f"⭐ Оплатить {package['stars']:,} Stars", callback_data=f"pay_coins_stars:{package_id}")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins_stars")],
         ])
         
         try:
@@ -738,6 +859,148 @@ async def select_coins_package(query: CallbackQuery):
         await query.answer()
     except Exception as e:
         logger.error(f"❌ Error in select_coins_package: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("select_coins_ton:"))
+async def select_coins_ton_package(query: CallbackQuery):
+    """
+    Show confirmation for Coins package (TON).
+    """
+    try:
+        package_id = query.data.split(":")[1]
+        
+        if package_id not in COINS_TON_PACKAGES:
+            await query.answer("❌ Неизвестный пакет", show_alert=True)
+            return
+        
+        package = COINS_TON_PACKAGES[package_id]
+        
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            # Check balance
+            ton_amount_decimal = Decimal(str(package['ton_amount']))
+            has_balance = user.ton_balance >= ton_amount_decimal
+            
+            text = (
+                f"{package['emoji']} **Пакет: {package['name']}**\n\n"
+                f"🪙 Получите: **{package['coins_amount']:,} Coins**\n"
+                f"💎 Стоимость: **{package['ton_amount']} TON**\n\n"
+                f"💼 **Ваш баланс:** {float(user.ton_balance):.4f} TON\n"
+                f"💼 **Останется:** {float(user.ton_balance - ton_amount_decimal):.4f} TON\n\n"
+            )
+            
+            if has_balance:
+                text += (
+                    f"✅ **У вас достаточно TON**\n\n"
+                    f"💳 **Способ оплаты:**\n"
+                    f"• С баланса TON\n"
+                    f"• Мгновенное зачисление\n\n"
+                    f"👇 Подтвердите покупку:"
+                )
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=f"✅ Купить за {package['ton_amount']} TON", callback_data=f"confirm_coins_ton:{package_id}")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins_ton")],
+                ])
+            else:
+                needed = float(ton_amount_decimal - user.ton_balance)
+                text += (
+                    f"❌ **Недостаточно TON**\n\n"
+                    f"Нужно ещё: {needed:.4f} TON\n\n"
+                    f"💡 Пополните баланс TON:"
+                )
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💎 Купить TON", callback_data="buy_ton")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins_ton")],
+                ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            if not has_balance:
+                await query.answer(f"❌ Недостаточно TON. Нужно ещё {needed:.4f} TON", show_alert=True)
+            else:
+                await query.answer()
+            
+    except Exception as e:
+        logger.error(f"❌ Error in select_coins_ton_package: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("confirm_coins_ton:"))
+async def confirm_coins_ton_purchase(query: CallbackQuery):
+    """
+    Confirm and execute Coins purchase with TON.
+    """
+    try:
+        package_id = query.data.split(":")[1]
+        
+        if package_id not in COINS_TON_PACKAGES:
+            await query.answer("❌ Неизвестный пакет", show_alert=True)
+            return
+        
+        package = COINS_TON_PACKAGES[package_id]
+        
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == query.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            ton_amount_decimal = Decimal(str(package['ton_amount']))
+            
+            # Double-check balance
+            if user.ton_balance < ton_amount_decimal:
+                await query.answer("❌ Недостаточно TON", show_alert=True)
+                return
+            
+            # Execute purchase
+            user.ton_balance -= ton_amount_decimal
+            user.coins += package['coins_amount']
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=package['coins_amount'],
+                transaction_type='purchase_ton_balance',
+                description=f'Покупка {package["name"]} за {package["ton_amount"]} TON (+{package["coins_amount"]:,} Coins)'
+            )
+            session.add(transaction)
+            await session.commit()
+            
+            # Success message
+            text = (
+                f"✅ **Покупка успешна!**\n\n"
+                f"🪙 **Начислено:** {package['coins_amount']:,} Coins\n"
+                f"💎 **Оплачено:** {package['ton_amount']} TON\n\n"
+                f"💼 **Новые балансы**\n"
+                f"├ 🪙 Coins: {user.coins:,.0f}\n"
+                f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
+                f"🎉 Спасибо за покупку!"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🐻 Купить медведей", callback_data="bears")],
+                [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
+                [InlineKeyboardButton(text="⬅️ В меню", callback_data="main_menu")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer("✅ Coins начислены!")
+            logger.info(f"✅ Coins Purchase: User {user.telegram_id} bought {package['coins_amount']:,} Coins for {package['ton_amount']} TON")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in confirm_coins_ton_purchase: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
