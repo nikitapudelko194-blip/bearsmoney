@@ -62,7 +62,7 @@ TON_PACKAGES = {
     },
 }
 
-# Coins packages with prices - REDUCED (100 Stars = 500 Coins, т.е. 1 Star = 5 Coins)
+# Coins packages with prices (1 Star = 5 Coins)
 COINS_PACKAGES = {
     'coins_1k': {
         'coins_amount': 500,
@@ -96,36 +96,36 @@ COINS_PACKAGES = {
     },
 }
 
-# Coins packages for TON - REDUCED (1 TON = 250,000 Coins)
+# Coins packages for TON - SYNCHRONIZED WITH STARS RATE (1 TON = 1,000 Coins)
 COINS_TON_PACKAGES = {
     'coins_ton_100k': {
-        'coins_amount': 50000,
+        'coins_amount': 200,
         'ton_amount': 0.2,
-        'name': '50,000 Coins',
+        'name': '200 Coins',
         'emoji': '💰'
     },
     'coins_ton_250k': {
-        'coins_amount': 100000,
+        'coins_amount': 500,
         'ton_amount': 0.5,
-        'name': '100,000 Coins',
+        'name': '500 Coins',
         'emoji': '💵'
     },
     'coins_ton_500k': {
-        'coins_amount': 250000,
+        'coins_amount': 1000,
         'ton_amount': 1.0,
-        'name': '250,000 Coins',
+        'name': '1,000 Coins',
         'emoji': '💸'
     },
     'coins_ton_1250k': {
-        'coins_amount': 500000,
+        'coins_amount': 2500,
         'ton_amount': 2.5,
-        'name': '500,000 Coins',
+        'name': '2,500 Coins',
         'emoji': '🤑'
     },
     'coins_ton_2500k': {
-        'coins_amount': 1000000,
+        'coins_amount': 5000,
         'ton_amount': 5.0,
-        'name': '1,000,000 Coins',
+        'name': '5,000 Coins',
         'emoji': '💎'
     },
 }
@@ -783,31 +783,27 @@ async def buy_coins_ton_menu(query: CallbackQuery):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
-            # Calculate exchange rate
-            rate = settings.COIN_TO_TON_RATE
-            coins_per_ton = int(1 / rate)
-            
             text = (
                 f"💎 **Купить Coins за TON**\n\n"
                 f"💼 **Ваш баланс**\n"
                 f"├ 🪙 Coins: {user.coins:,.0f}\n"
                 f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
-                f"📈 **Курс:** 1 TON = {coins_per_ton:,} Coins\n\n"
+                f"📈 **Курс:** 1 TON = 1,000 Coins\n\n"
                 f"💰 **Выберите пакет:**\n\n"
-                f"💰 **50,000 Coins** - 0.2 TON\n"
-                f"💵 **100,000 Coins** - 0.5 TON\n"
-                f"💸 **250,000 Coins** - 1.0 TON\n"
-                f"🤑 **500,000 Coins** - 2.5 TON\n"
-                f"💎 **1,000,000 Coins** - 5.0 TON\n\n"
+                f"💰 **200 Coins** - 0.2 TON\n"
+                f"💵 **500 Coins** - 0.5 TON\n"
+                f"💸 **1,000 Coins** - 1.0 TON\n"
+                f"🤑 **2,500 Coins** - 2.5 TON\n"
+                f"💎 **5,000 Coins** - 5.0 TON\n\n"
                 f"👇 Выберите пакет:"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💰 50,000 Coins", callback_data="select_coins_ton:coins_ton_100k")],
-                [InlineKeyboardButton(text="💵 100,000 Coins", callback_data="select_coins_ton:coins_ton_250k")],
-                [InlineKeyboardButton(text="💸 250,000 Coins", callback_data="select_coins_ton:coins_ton_500k")],
-                [InlineKeyboardButton(text="🤑 500,000 Coins", callback_data="select_coins_ton:coins_ton_1250k")],
-                [InlineKeyboardButton(text="💎 1,000,000 Coins", callback_data="select_coins_ton:coins_ton_2500k")],
+                [InlineKeyboardButton(text="💰 200 Coins", callback_data="select_coins_ton:coins_ton_100k")],
+                [InlineKeyboardButton(text="💵 500 Coins", callback_data="select_coins_ton:coins_ton_250k")],
+                [InlineKeyboardButton(text="💸 1,000 Coins", callback_data="select_coins_ton:coins_ton_500k")],
+                [InlineKeyboardButton(text="🤑 2,500 Coins", callback_data="select_coins_ton:coins_ton_1250k")],
+                [InlineKeyboardButton(text="💎 5,000 Coins", callback_data="select_coins_ton:coins_ton_2500k")],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data="buy_coins")],
             ])
             
