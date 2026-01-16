@@ -295,9 +295,8 @@ async def pay_with_ton_wallet(query: CallbackQuery):
         
         package = TON_PACKAGES[package_id]
         
-        # TODO: Generate unique deposit address or use payment link
-        # For now, using placeholder address
-        deposit_address = "UQAabc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
+        # Real TON wallet address for receiving payments
+        deposit_address = "UQBLaN9mzDOTceNlEGqo5JCjjWi8deYPYddGFzG_CqF4zXXg"
         
         # Generate payment memo (comment)
         payment_memo = f"USER_{query.from_user.id}_{package_id}"
