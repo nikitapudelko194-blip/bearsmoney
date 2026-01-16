@@ -1,7 +1,7 @@
 """SQLAlchemy models for the database."""
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Enum
+    Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Enum, Numeric
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -19,7 +19,7 @@ class User(Base):
     username = Column(String(255))
     first_name = Column(String(255))
     coins = Column(Float, default=0)
-    ton_balance = Column(Float, default=0)  # TON баланс
+    ton_balance = Column(Numeric(10, 4), default=0)  # TON баланс с точностью до 4 знаков
     level = Column(Integer, default=1)
     experience = Column(Float, default=0)
     is_premium = Column(Boolean, default=False)
