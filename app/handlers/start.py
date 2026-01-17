@@ -18,8 +18,8 @@ router = Router()
 
 # Экономические константы
 STARTING_BONUS = 3000  # Стартовый бонус
-REFERRAL_BONUS_REFERRER = 1000  # Бонус рефереру
-REFERRAL_BONUS_REFERRED = 500   # Бонус новому игроку
+REFERRAL_BONUS_REFERRER = 100  # Бонус рефереру (уменьшено с 1000)
+REFERRAL_BONUS_REFERRED = 50   # Бонус новому игроку (уменьшено с 500)
 
 
 @router.message(Command("start"))
