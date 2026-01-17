@@ -1,124 +1,125 @@
-"""Analytics and tracking service."""
+"""Analytics service for tracking user events and behavior."""
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Any
+from typing import Dict, List, Optional
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.models import User, Bear, CoinTransaction, Withdrawal
+from app.database.models import User, CoinTransaction, Bear
 
 logger = logging.getLogger(__name__)
 
 
 class AnalyticsService:
-    """Service for tracking and analyzing user behavior."""
+    """Analytics service for tracking and analyzing user behavior."""
     
-    @staticmethod
-    async def track_event(session: AsyncSession, user_id: int, event_type: str, metadata: Dict[str, Any] = None):
+    def __init__(self, session):
+        self.session = session
+    
+    async def track_event(self, user_id: int, event_name: str, properties: Optional[Dict] = None):
         """Track user event."""
         try:
-            # TODO: Store events in a separate table for proper analytics
-            logger.info(f"Event tracked: user={user_id}, type={event_type}, data={metadata}")
-        except Exception as e:
-            logger.error(f"Error tracking event: {e}", exc_info=True)
-    
-    @staticmethod
-    async def get_daily_active_users(session: AsyncSession, days: int = 7) -> List[int]:
-        """Get DAU for last N days."""
-        try:
-            result = []
-            for i in range(days):
-                day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i)
-                day_end = day_start + timedelta(days=1)
-                
-                query = select(func.count(func.distinct(CoinTransaction.user_id))).where(
-                    CoinTransaction.created_at >= day_start,
-                    CoinTransaction.created_at < day_end
-                )
-                count_result = await session.execute(query)
-                count = count_result.scalar() or 0
-                result.append(count)
+            # Log event
+            logger.info(f"📊 Event: {event_name} - User: {user_id} - Props: {properties}")
             
-            return list(reversed(result))
-        except Exception as e:
-            logger.error(f"Error getting DAU: {e}", exc_info=True)
-            return []
-    
-    @staticmethod
-    async def get_retention_cohort(session: AsyncSession, cohort_date: datetime) -> Dict[str, Any]:
-        """Calculate retention for a specific cohort."""
-        try:
-            cohort_start = cohort_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            cohort_end = cohort_start + timedelta(days=1)
+            # In production: Send to analytics platform (Amplitude, Mixpanel, etc.)
+            # await self._send_to_analytics_platform(user_id, event_name, properties)
             
-            # Users registered in cohort
-            users_query = select(User).where(
-                User.created_at >= cohort_start,
-                User.created_at < cohort_end
+        except Exception as e:
+            logger.error(f"❌ Error tracking event: {e}", exc_info=True)
+    
+    async def get_retention_rate(self, days: int = 7) -> Dict:
+        """Calculate user retention rate."""
+        try:
+            now = datetime.utcnow()
+            start_date = now - timedelta(days=days)
+            
+            # Get total users registered in period
+            total_query = select(func.count(User.id)).where(
+                User.created_at >= start_date
             )
-            users_result = await session.execute(users_query)
-            cohort_users = users_result.scalars().all()
-            cohort_size = len(cohort_users)
-            
-            if cohort_size == 0:
-                return {"cohort_date": cohort_date, "size": 0, "retention": {}}
-            
-            user_ids = [u.id for u in cohort_users]
-            
-            # Calculate retention for days 1, 3, 7, 14, 30
-            retention = {}
-            for day in [1, 3, 7, 14, 30]:
-                check_start = cohort_start + timedelta(days=day)
-                check_end = check_start + timedelta(days=1)
-                
-                active_query = select(func.count(func.distinct(CoinTransaction.user_id))).where(
-                    CoinTransaction.user_id.in_(user_ids),
-                    CoinTransaction.created_at >= check_start,
-                    CoinTransaction.created_at < check_end
-                )
-                active_result = await session.execute(active_query)
-                active_count = active_result.scalar() or 0
-                
-                retention[f"day_{day}"] = round(active_count / cohort_size * 100, 2)
-            
-            return {
-                "cohort_date": cohort_date,
-                "size": cohort_size,
-                "retention": retention
-            }
-        except Exception as e:
-            logger.error(f"Error calculating retention: {e}", exc_info=True)
-            return {"error": str(e)}
-    
-    @staticmethod
-    async def get_revenue_metrics(session: AsyncSession) -> Dict[str, Any]:
-        """Get revenue and monetization metrics."""
-        try:
-            # Total revenue (from premium, etc)
-            # This is simplified - in production, track actual TON payments
-            
-            # Premium users
-            premium_query = select(func.count(User.id)).where(User.is_premium == True)
-            premium_result = await session.execute(premium_query)
-            premium_count = premium_result.scalar() or 0
-            
-            # Total users
-            total_query = select(func.count(User.id))
-            total_result = await session.execute(total_query)
+            total_result = await self.session.execute(total_query)
             total_users = total_result.scalar() or 0
             
-            # Withdrawals
-            withdrawals_query = select(func.sum(Withdrawal.amount_crypto)).where(
-                Withdrawal.status == 'completed'
+            if total_users == 0:
+                return {"retention_rate": 0, "total_users": 0, "active_users": 0}
+            
+            # Get active users (users who made transactions in last 24h)
+            active_date = now - timedelta(days=1)
+            active_query = select(func.count(func.distinct(CoinTransaction.user_id))).where(
+                CoinTransaction.created_at >= active_date
             )
-            withdrawals_result = await session.execute(withdrawals_query)
-            total_withdrawals = float(withdrawals_result.scalar() or 0)
+            active_result = await self.session.execute(active_query)
+            active_users = active_result.scalar() or 0
+            
+            retention_rate = (active_users / total_users) * 100 if total_users > 0 else 0
             
             return {
-                "premium_users": premium_count,
+                "retention_rate": round(retention_rate, 2),
                 "total_users": total_users,
-                "premium_rate": round(premium_count / total_users * 100, 2) if total_users > 0 else 0,
-                "total_withdrawals_ton": total_withdrawals,
+                "active_users": active_users,
+                "period_days": days
             }
+        
         except Exception as e:
-            logger.error(f"Error getting revenue metrics: {e}", exc_info=True)
-            return {"error": str(e)}
+            logger.error(f"❌ Error calculating retention: {e}", exc_info=True)
+            return {"retention_rate": 0, "total_users": 0, "active_users": 0}
+    
+    async def get_user_ltv(self, user_id: int) -> float:
+        """Calculate user lifetime value."""
+        try:
+            # Get total spent
+            spent_query = select(func.sum(CoinTransaction.amount)).where(
+                CoinTransaction.user_id == user_id,
+                CoinTransaction.transaction_type == 'spend'
+            )
+            spent_result = await self.session.execute(spent_query)
+            total_spent = abs(spent_result.scalar() or 0)
+            
+            # In production: Calculate based on real money spent
+            # For now, use coins as proxy (1000 coins = $1)
+            ltv = total_spent / 1000
+            
+            return round(ltv, 2)
+        
+        except Exception as e:
+            logger.error(f"❌ Error calculating LTV: {e}", exc_info=True)
+            return 0.0
+    
+    async def get_cohort_analysis(self, cohort_days: int = 30) -> List[Dict]:
+        """Perform cohort analysis."""
+        try:
+            now = datetime.utcnow()
+            cohorts = []
+            
+            for i in range(cohort_days):
+                cohort_date = now - timedelta(days=i)
+                cohort_start = cohort_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                cohort_end = cohort_start + timedelta(days=1)
+                
+                # Get users registered in this cohort
+                cohort_query = select(func.count(User.id)).where(
+                    User.created_at >= cohort_start,
+                    User.created_at < cohort_end
+                )
+                cohort_result = await self.session.execute(cohort_query)
+                cohort_size = cohort_result.scalar() or 0
+                
+                cohorts.append({
+                    "date": cohort_start.strftime("%Y-%m-%d"),
+                    "users": cohort_size,
+                    "day": i
+                })
+            
+            return cohorts
+        
+        except Exception as e:
+            logger.error(f"❌ Error in cohort analysis: {e}", exc_info=True)
+            return []
+
+
+# Global analytics instance
+analytics = None
+
+
+async def get_analytics(session):
+    """Get analytics service instance."""
+    return AnalyticsService(session)
