@@ -12,6 +12,7 @@ class Settings:
     
     # Telegram Bot
     BOT_TOKEN: str = os.getenv('BOT_TOKEN', '')
+    BOT_USERNAME: str = os.getenv('BOT_USERNAME', 'proba9988_bot')  # Bot username for referral links
     ADMIN_ID: int = int(os.getenv('ADMIN_ID', '0'))
     
     # Database
