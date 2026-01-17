@@ -1,7 +1,7 @@
 """Start command handler."""
 import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +9,7 @@ from app.database.db import get_session
 from app.database.models import User
 from datetime import datetime
 from app.keyboards.main_menu import get_main_menu
+from app.keyboards.persistent_menu import get_persistent_menu
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 logger = logging.getLogger(__name__)
@@ -132,10 +133,10 @@ async def cmd_start(message: Message):
                 parse_mode="markdown"
             )
             
-            # Remove any old reply keyboards
+            # Add persistent menu button
             await message.answer(
-                "🐻 Меню загружено!",
-                reply_markup=ReplyKeyboardRemove()
+                "👇 Используйте кнопку ниже для быстрого возврата в меню:",
+                reply_markup=get_persistent_menu()
             )
             
     except Exception as e:
@@ -144,6 +145,32 @@ async def cmd_start(message: Message):
             f"❌ Ошибка при инициализации.\n\n"
             f"Технические детали: {str(e)}"
         )
+
+
+@router.message(F.text == "🏠 Главное меню")
+async def persistent_menu_button(message: Message):
+    """
+    Handle persistent menu button click.
+    """
+    try:
+        async with get_session() as session:
+            user_query = select(User).where(User.telegram_id == message.from_user.id)
+            user_result = await session.execute(user_query)
+            user = user_result.scalar_one()
+            
+            text = (
+                f"🐻 **Лавы в БеарсМани!**\n\n"
+                f"💰 **Основное меню**\n\n"
+                f"👤 @{message.from_user.username or 'User'}\n"
+                f"🪙 Баланс: {user.coins:.0f} коинов\n"
+                f"💎 TON: {user.ton_balance:.4f}\n"
+                f"⭐ Уровень: {user.level}"
+            )
+            
+            await message.answer(text, reply_markup=get_main_menu(), parse_mode="markdown")
+    except Exception as e:
+        logger.error(f"❌ Error in persistent_menu_button: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
 
 
 @router.callback_query(F.data == "main_menu")
