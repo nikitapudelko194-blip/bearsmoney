@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, Subscription, CoinTransaction
@@ -11,67 +12,54 @@ from app.database.models import User, Subscription, CoinTransaction
 logger = logging.getLogger(__name__)
 router = Router()
 
-# Premium tiers configuration
+# Premium tiers
 PREMIUM_TIERS = {
-    "basic": {
-        "name": "Базовый",
-        "emoji": "⚪",
-        "price_ton": 0,
-        "price_coins": 0,
-        "income_bonus": 0,
-        "commission_reduction": 0,
-        "features": ["Базовые функции"],
-    },
-    "premium": {
-        "name": "Premium",
-        "emoji": "👑",
-        "price_ton": 0.1,  # 100 TON -> 0.1 for testing
-        "price_coins": 100000,
-        "income_bonus": 0.5,  # +50% income
-        "commission_reduction": 0.02,  # 0% commission (removes 2%)
-        "features": [
-            "✨ +50% к доходу от медведей",
-            "💸 0% комиссии на обмен и вывод",
-            "🎁 Эксклюзивные кейсы",
-            "🎯 Приоритетная поддержка",
-            "🏆 Специальный бейдж",
+    'basic': {
+        'name': '🆓 Basic',
+        'price_ton': 0,
+        'income_bonus': 0,  # 0% bonus
+        'commission_reduction': 0,  # No reduction
+        'withdraw_limit': 100,  # TON
+        'features': [
+            '✅ Базовые функции',
+            '✅ Обычные медведи',
+            '✅ Стандартный обмен',
+            '❌ Эксклюзивные медведи',
+            '❌ Бонусы к доходу',
         ],
     },
-    "vip": {
-        "name": "VIP",
-        "emoji": "💎",
-        "price_ton": 0.5,  # 500 TON -> 0.5 for testing
-        "price_coins": 500000,
-        "income_bonus": 1.0,  # +100% income (2x)
-        "commission_reduction": 0.02,  # 0% commission
-        "features": [
-            "🚀 +100% к доходу от медведей",
-            "💸 0% комиссии на всё",
-            "🎉 VIP кейсы с гарантией легенд",
-            "⚡ Мгновенный вывод",
-            "🎁 Еженедельные бонусы",
-            "👑 Эксклюзивные медведи",
-            "🏆 VIP бейдж и статус",
+    'premium': {
+        'name': '⭐ Premium',
+        'price_ton': 100,
+        'income_bonus': 0.5,  # +50% к доходу
+        'commission_reduction': 0.02,  # -2% (0% комиссии)
+        'withdraw_limit': 1000,
+        'features': [
+            '✅ Все функции Basic',
+            '✅ +50% к доходу от медведей',
+            '✅ 0% комиссии на обмен',
+            '✅ Эксклюзивные медведи',
+            '✅ Приоритетная поддержка',
+            '✅ Специальный бейдж ⭐',
+        ],
+    },
+    'vip': {
+        'name': '💎 VIP',
+        'price_ton': 500,
+        'income_bonus': 1.0,  # +100% к доходу (x2)
+        'commission_reduction': 0.02,  # 0% комиссий
+        'withdraw_limit': 10000,
+        'features': [
+            '✅ Все функции Premium',
+            '✅ +100% к доходу (x2)',
+            '✅ 0% комиссий везде',
+            '✅ Легендарные медведи',
+            '✅ VIP кейсы',
+            '✅ Личный менеджер',
+            '✅ Эксклюзивный бейдж 💎',
         ],
     },
 }
-
-
-async def get_active_subscription(user_id: int, session) -> Subscription | None:
-    """
-    Get active subscription for user.
-    """
-    query = (
-        select(Subscription)
-        .where(
-            Subscription.user_id == user_id,
-            Subscription.status == "active",
-            Subscription.expires_at > datetime.utcnow(),
-        )
-        .order_by(Subscription.expires_at.desc())
-    )
-    result = await session.execute(query)
-    return result.scalar_one_or_none()
 
 
 @router.callback_query(F.data == "premium")
@@ -81,400 +69,394 @@ async def premium_menu(query: CallbackQuery):
     """
     try:
         async with get_session() as session:
+            # Get user
             user_query = select(User).where(User.telegram_id == query.from_user.id)
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
-
-            # Get current subscription
-            subscription = await get_active_subscription(user.id, session)
-            current_tier = subscription.tier if subscription else "basic"
-
-            tier_info = PREMIUM_TIERS[current_tier]
-
+            
+            # Get active subscription
+            sub_query = select(Subscription).where(
+                Subscription.user_id == user.id,
+                Subscription.status == 'active'
+            ).order_by(Subscription.expires_at.desc())
+            sub_result = await session.execute(sub_query)
+            subscription = sub_result.scalar_one_or_none()
+            
+            current_tier = subscription.tier if subscription else 'basic'
+            
             text = (
                 f"⭐ **Premium подписка**\n\n"
-                f"💼 **Текущий статус:**\n"
-                f"{tier_info['emoji']} **{tier_info['name']}**\n\n"
+                f"💼 **Текущий статус:** {PREMIUM_TIERS[current_tier]['name']}\n"
             )
-
-            if subscription:
-                time_left = subscription.expires_at - datetime.utcnow()
-                days_left = time_left.days
-                hours_left = time_left.seconds // 3600
-
-                text += (
-                    f"⏰ **Действует до:**\n"
-                    f"{subscription.expires_at.strftime('%d.%m.%Y %H:%M')}\n"
-                    f"(осталось: {days_left}д {hours_left}ч)\n\n"
-                )
-
-                if subscription.auto_renew:
-                    text += "♻️ **Авто-продление:** Включено\n\n"
-
-            text += "🎯 **Доступные тарифы:**\n\n"
-
-            # Show all tiers
-            for tier_key, tier in PREMIUM_TIERS.items():
-                if tier_key == "basic":
-                    continue
-
-                is_current = tier_key == current_tier
-                status = " (Текущий)" if is_current else ""
-
-                text += (
-                    f"{tier['emoji']} **{tier['name']}{status}**\n"
-                    f"💰 Цена: {tier['price_ton']} TON или {tier['price_coins']:,} Coins\n"
-                )
-
-                for feature in tier["features"]:
-                    text += f"  {feature}\n"
-
-                text += "\n"
-
+            
+            if subscription and subscription.expires_at:
+                days_left = (subscription.expires_at - datetime.utcnow()).days
+                text += f"⏰ Действует: {days_left} дней\n"
+                text += f"🔄 Авто-продление: {'✅' if subscription.auto_renew else '❌'}\n"
+            
             text += (
-                "💡 **Преимущества Premium:**\n"
-                "• Увеличенный доход\n"
-                "• Минимальные комиссии\n"
-                "• Эксклюзивный контент\n"
-                "• Приоритетная поддержка\n"
+                f"\n📊 **Доступные тарифы:**\n\n"
             )
-
+            
             keyboard = []
-
-            # Add upgrade buttons
-            if current_tier == "basic":
-                keyboard.append(
-                    [
-                        InlineKeyboardButton(
-                            text="👑 Купить Premium", callback_data="buy_premium_premium"
-                        )
-                    ]
-                )
-                keyboard.append(
-                    [
-                        InlineKeyboardButton(
-                            text="💎 Купить VIP", callback_data="buy_premium_vip"
-                        )
-                    ]
-                )
-            elif current_tier == "premium":
-                keyboard.append(
-                    [
-                        InlineKeyboardButton(
-                            text="💎 Улучшить до VIP", callback_data="buy_premium_vip"
-                        )
-                    ]
-                )
-
-            # Add manage button if has subscription
-            if subscription:
-                keyboard.append(
-                    [
-                        InlineKeyboardButton(
-                            text="⚙️ Управление", callback_data="manage_premium"
-                        )
-                    ]
-                )
-
-            keyboard.append(
-                [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")]
-            )
-
+            
+            for tier_id, tier in PREMIUM_TIERS.items():
+                if tier_id == 'basic':
+                    continue  # Skip basic (free tier)
+                
+                status = " ✅" if current_tier == tier_id else ""
+                button_text = f"{tier['name']} - {tier['price_ton']} TON/мес{status}"
+                keyboard.append([InlineKeyboardButton(
+                    text=button_text,
+                    callback_data=f"premium_tier_{tier_id}"
+                )])
+            
+            keyboard.append([InlineKeyboardButton(text="ℹ️ Сравнить тарифы", callback_data="premium_compare")])
+            
+            if subscription and subscription.auto_renew:
+                keyboard.append([InlineKeyboardButton(text="❌ Отменить авто-продление", callback_data="premium_cancel_autorenew")])
+            
+            keyboard.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")])
+            
             reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-
+            
             try:
-                await query.message.edit_text(
-                    text, reply_markup=reply_markup, parse_mode="markdown"
-                )
+                await query.message.edit_text(text, reply_markup=reply_markup, parse_mode="markdown")
             except Exception:
-                await query.message.answer(
-                    text, reply_markup=reply_markup, parse_mode="markdown"
-                )
-
+                await query.message.answer(text, reply_markup=reply_markup, parse_mode="markdown")
+            
             await query.answer()
-
+    
     except Exception as e:
         logger.error(f"❌ Error in premium_menu: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("buy_premium_"))
-async def buy_premium(query: CallbackQuery):
+@router.callback_query(F.data.startswith("premium_tier_"))
+async def premium_tier_details(query: CallbackQuery):
     """
-    Buy premium subscription.
+    Show premium tier details.
     """
     try:
-        tier = query.data.split("_")[-1]  # premium or vip
-        tier_info = PREMIUM_TIERS[tier]
-
+        tier_id = query.data.split("_")[-1]
+        tier = PREMIUM_TIERS.get(tier_id)
+        
+        if not tier:
+            await query.answer("❌ Тариф не найден", show_alert=True)
+            return
+        
         async with get_session() as session:
             user_query = select(User).where(User.telegram_id == query.from_user.id)
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
-
+            
             text = (
-                f"💳 **Покупка {tier_info['name']}**\n\n"
-                f"{tier_info['emoji']} **{tier_info['name']}**\n"
-                f"💰 Цена: {tier_info['price_ton']} TON или {tier_info['price_coins']:,} Coins\n\n"
-                f"🎁 **Что вы получите:**\n"
+                f"{tier['name']} **Подписка**\n\n"
+                f"💰 **Стоимость:** {tier['price_ton']} TON/месяц\n"
+                f"📈 **Бонус к доходу:** +{int(tier['income_bonus']*100)}%\n"
+                f"📉 **Комиссия:** {0 if tier['commission_reduction'] > 0 else 2}%\n"
+                f"💸 **Лимит вывода:** {tier['withdraw_limit']} TON\n\n"
+                f"✨ **Преимущества:**\n"
             )
-
-            for feature in tier_info["features"]:
+            
+            for feature in tier['features']:
                 text += f"{feature}\n"
-
+            
             text += (
-                f"\n💼 **Ваш баланс:**\n"
-                f"├ 🪙 Coins: {user.coins:,.0f}\n"
-                f"└ 💎 TON: {float(user.ton_balance):.4f}\n\n"
-                f"⏰ **Срок:** 30 дней\n\n"
-                f"💡 Выберите способ оплаты:"
+                f"\n💼 **Ваш баланс:** {float(user.ton_balance):.4f} TON\n"
             )
-
-            keyboard = [
-                [
-                    InlineKeyboardButton(
-                        text=f"💎 Оплатить {tier_info['price_ton']} TON",
-                        callback_data=f"confirm_premium_ton_{tier}",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=f"🪙 Оплатить {tier_info['price_coins']:,} Coins",
-                        callback_data=f"confirm_premium_coins_{tier}",
-                    )
-                ],
-                [InlineKeyboardButton(text="❌ Отмена", callback_data="premium")],
-            ]
-
+            
+            if float(user.ton_balance) < tier['price_ton']:
+                text += f"\n⚠️ Недостаточно средств. Нужно ещё {tier['price_ton'] - float(user.ton_balance):.4f} TON"
+            
+            keyboard = []
+            
+            if float(user.ton_balance) >= tier['price_ton']:
+                keyboard.append([InlineKeyboardButton(
+                    text=f"✅ Купить за {tier['price_ton']} TON",
+                    callback_data=f"premium_buy_{tier_id}"
+                )])
+            else:
+                keyboard.append([InlineKeyboardButton(
+                    text="💱 Обменять Coins → TON",
+                    callback_data="exchange_coins_to_ton"
+                )])
+            
+            keyboard.append([InlineKeyboardButton(text="⬅️ К тарифам", callback_data="premium")])
+            
             reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-
+            
             try:
-                await query.message.edit_text(
-                    text, reply_markup=reply_markup, parse_mode="markdown"
-                )
+                await query.message.edit_text(text, reply_markup=reply_markup, parse_mode="markdown")
             except Exception:
-                await query.message.answer(
-                    text, reply_markup=reply_markup, parse_mode="markdown"
-                )
-
+                await query.message.answer(text, reply_markup=reply_markup, parse_mode="markdown")
+            
             await query.answer()
-
+    
     except Exception as e:
-        logger.error(f"❌ Error in buy_premium: {e}", exc_info=True)
+        logger.error(f"❌ Error in premium_tier_details: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("confirm_premium_"))
-async def confirm_premium_purchase(query: CallbackQuery):
+@router.callback_query(F.data.startswith("premium_buy_"))
+async def premium_buy(query: CallbackQuery):
     """
-    Confirm premium purchase.
+    Purchase premium subscription.
     """
     try:
-        parts = query.data.split("_")
-        payment_method = parts[2]  # ton or coins
-        tier = parts[3]  # premium or vip
-
-        tier_info = PREMIUM_TIERS[tier]
-
+        tier_id = query.data.split("_")[-1]
+        tier = PREMIUM_TIERS.get(tier_id)
+        
+        if not tier:
+            await query.answer("❌ Тариф не найден", show_alert=True)
+            return
+        
         async with get_session() as session:
             user_query = select(User).where(User.telegram_id == query.from_user.id)
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
-
+            
             # Check balance
-            if payment_method == "ton":
-                price = Decimal(str(tier_info["price_ton"]))
-                if user.ton_balance < price:
-                    await query.answer(
-                        f"❌ Недостаточно TON! Нужно: {float(price):.4f}",
-                        show_alert=True,
-                    )
-                    return
-                user.ton_balance -= price
-            else:  # coins
-                price = tier_info["price_coins"]
-                if user.coins < price:
-                    await query.answer(
-                        f"❌ Недостаточно Coins! Нужно: {price:,}", show_alert=True
-                    )
-                    return
-                user.coins -= price
-
-                # Log transaction
-                transaction = CoinTransaction(
-                    user_id=user.id,
-                    amount=-price,
-                    transaction_type="premium_purchase",
-                    description=f"Покупка {tier_info['name']} подписки",
-                )
-                session.add(transaction)
-
+            if float(user.ton_balance) < tier['price_ton']:
+                await query.answer("❌ Недостаточно TON", show_alert=True)
+                return
+            
+            # Deduct payment
+            user.ton_balance -= Decimal(str(tier['price_ton']))
+            
             # Create or update subscription
-            subscription = await get_active_subscription(user.id, session)
-
+            sub_query = select(Subscription).where(
+                Subscription.user_id == user.id,
+                Subscription.status == 'active'
+            )
+            sub_result = await session.execute(sub_query)
+            subscription = sub_result.scalar_one_or_none()
+            
+            now = datetime.utcnow()
+            expires_at = now + timedelta(days=30)
+            
             if subscription:
-                # Extend existing subscription
-                subscription.tier = tier
-                subscription.expires_at += timedelta(days=30)
+                # Extend existing
+                subscription.tier = tier_id
+                subscription.expires_at = expires_at
+                subscription.coins_bonus = tier['income_bonus']
+                subscription.commission_reduction = tier['commission_reduction']
+                subscription.withdraw_limit = tier['withdraw_limit']
+                subscription.auto_renew = True
             else:
-                # Create new subscription
+                # Create new
                 subscription = Subscription(
                     user_id=user.id,
-                    tier=tier,
-                    coins_bonus=tier_info["income_bonus"],
-                    commission_reduction=tier_info["commission_reduction"],
-                    started_at=datetime.utcnow(),
-                    expires_at=datetime.utcnow() + timedelta(days=30),
-                    status="active",
-                    auto_renew=False,
+                    tier=tier_id,
+                    coins_bonus=tier['income_bonus'],
+                    commission_reduction=tier['commission_reduction'],
+                    withdraw_limit=tier['withdraw_limit'],
+                    status='active',
+                    started_at=now,
+                    expires_at=expires_at,
+                    auto_renew=True
                 )
                 session.add(subscription)
-
+            
             # Update user premium status
             user.is_premium = True
-            user.premium_until = subscription.expires_at
-
-            await session.commit()
-
-            # Success message
-            text = (
-                f"✅ **Поздравляем!**\n\n"
-                f"{tier_info['emoji']} Вы приобрели **{tier_info['name']}**!\n\n"
-                f"🎉 **Ваши преимущества:**\n"
+            user.premium_until = expires_at
+            
+            # Log transaction
+            transaction = CoinTransaction(
+                user_id=user.id,
+                amount=-tier['price_ton'],
+                transaction_type='premium_purchase',
+                description=f'Покупка {tier["name"]} подписки на 30 дней'
             )
-
-            for feature in tier_info["features"]:
+            session.add(transaction)
+            
+            await session.commit()
+            
+            text = (
+                f"✅ **Подписка активирована!**\n\n"
+                f"🎉 Поздравляем с покупкой {tier['name']}!\n\n"
+                f"✨ **Ваши преимущества:**\n"
+            )
+            
+            for feature in tier['features']:
                 text += f"{feature}\n"
-
+            
             text += (
-                f"\n⏰ **Действует до:**\n"
-                f"{subscription.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-                f"💡 Теперь вы получаете больше дохода от медведей!"
+                f"\n⏰ **Действует до:** {expires_at.strftime('%d.%m.%Y')}\n"
+                f"🔄 **Авто-продление:** включено\n\n"
+                f"💼 **Новый баланс:** {float(user.ton_balance):.4f} TON\n"
             )
-
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="🎉 Отлично!", callback_data="main_menu"
-                        )
-                    ],
-                ]
-            )
-
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🐻 К медведям", callback_data="bears")],
+                [InlineKeyboardButton(text="⬅️ В меню", callback_data="main_menu")],
+            ])
+            
             try:
-                await query.message.edit_text(
-                    text, reply_markup=keyboard, parse_mode="markdown"
-                )
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
             except Exception:
-                await query.message.answer(
-                    text, reply_markup=keyboard, parse_mode="markdown"
-                )
-
-            await query.answer("🎉 Поздравляем!")
-
-            logger.info(
-                f"✅ User {user.telegram_id} purchased {tier} subscription via {payment_method}"
-            )
-
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer("🎉 Подписка активирована!")
+            
+            logger.info(f"✅ User {user.telegram_id} purchased {tier_id} subscription for {tier['price_ton']} TON")
+    
     except Exception as e:
-        logger.error(f"❌ Error in confirm_premium_purchase: {e}", exc_info=True)
+        logger.error(f"❌ Error in premium_buy: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-@router.callback_query(F.data == "manage_premium")
-async def manage_premium(query: CallbackQuery):
+@router.callback_query(F.data == "premium_compare")
+async def premium_compare(query: CallbackQuery):
     """
-    Manage premium subscription.
+    Compare premium tiers.
+    """
+    try:
+        text = (
+            "📊 **Сравнение тарифов**\n\n"
+        )
+        
+        # Create comparison table
+        for tier_id, tier in PREMIUM_TIERS.items():
+            text += f"**{tier['name']}**\n"
+            text += f"💰 Цена: {tier['price_ton']} TON/мес\n"
+            text += f"📈 Бонус: +{int(tier['income_bonus']*100)}%\n"
+            text += f"📉 Комиссия: {0 if tier['commission_reduction'] > 0 else 2}%\n"
+            text += f"💸 Лимит: {tier['withdraw_limit']} TON\n\n"
+        
+        text += (
+            "💡 **Рекомендация:**\n"
+            "• Basic - для начинающих\n"
+            "• Premium - лучший баланс\n"
+            "• VIP - для профи\n"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⭐ Premium", callback_data="premium_tier_premium")],
+            [InlineKeyboardButton(text="💎 VIP", callback_data="premium_tier_vip")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="premium")],
+        ])
+        
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+        except Exception:
+            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+        
+        await query.answer()
+    
+    except Exception as e:
+        logger.error(f"❌ Error in premium_compare: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "premium_cancel_autorenew")
+async def premium_cancel_autorenew(query: CallbackQuery):
+    """
+    Cancel auto-renewal.
     """
     try:
         async with get_session() as session:
             user_query = select(User).where(User.telegram_id == query.from_user.id)
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
-
-            subscription = await get_active_subscription(user.id, session)
-
-            if not subscription:
-                await query.answer("❌ У вас нет активной подписки", show_alert=True)
-                return
-
-            tier_info = PREMIUM_TIERS[subscription.tier]
-            time_left = subscription.expires_at - datetime.utcnow()
-
-            text = (
-                f"⚙️ **Управление подпиской**\n\n"
-                f"{tier_info['emoji']} **{tier_info['name']}**\n\n"
-                f"⏰ **Действует до:**\n"
-                f"{subscription.expires_at.strftime('%d.%m.%Y %H:%M')}\n"
-                f"(осталось: {time_left.days}д {time_left.seconds // 3600}ч)\n\n"
+            
+            # Get subscription
+            sub_query = select(Subscription).where(
+                Subscription.user_id == user.id,
+                Subscription.status == 'active'
             )
-
-            if subscription.auto_renew:
-                text += "♻️ **Авто-продление:** Включено\n"
-                auto_renew_text = "❌ Выключить авто-продление"
-                auto_renew_data = "toggle_auto_renew_off"
-            else:
-                text += "🚫 **Авто-продление:** Выключено\n"
-                auto_renew_text = "✅ Включить авто-продление"
-                auto_renew_data = "toggle_auto_renew_on"
-
-            keyboard = [
-                [InlineKeyboardButton(text=auto_renew_text, callback_data=auto_renew_data)],
-                [
-                    InlineKeyboardButton(
-                        text="🔄 Продлить подписку", callback_data=f"renew_premium_{subscription.tier}"
-                    )
-                ],
-                [InlineKeyboardButton(text="⬅️ Назад", callback_data="premium")],
-            ]
-
-            reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-            try:
-                await query.message.edit_text(
-                    text, reply_markup=reply_markup, parse_mode="markdown"
-                )
-            except Exception:
-                await query.message.answer(
-                    text, reply_markup=reply_markup, parse_mode="markdown"
-                )
-
-            await query.answer()
-
-    except Exception as e:
-        logger.error(f"❌ Error in manage_premium: {e}", exc_info=True)
-        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
-
-
-@router.callback_query(F.data.startswith("toggle_auto_renew_"))
-async def toggle_auto_renew(query: CallbackQuery):
-    """
-    Toggle auto-renewal.
-    """
-    try:
-        action = query.data.split("_")[-1]  # on or off
-
-        async with get_session() as session:
-            user_query = select(User).where(User.telegram_id == query.from_user.id)
-            user_result = await session.execute(user_query)
-            user = user_result.scalar_one()
-
-            subscription = await get_active_subscription(user.id, session)
-
+            sub_result = await session.execute(sub_query)
+            subscription = sub_result.scalar_one_or_none()
+            
             if not subscription:
-                await query.answer("❌ У вас нет активной подписки", show_alert=True)
+                await query.answer("❌ Активная подписка не найдена", show_alert=True)
                 return
-
-            subscription.auto_renew = action == "on"
+            
+            subscription.auto_renew = False
             await session.commit()
-
-            status = "Включено" if subscription.auto_renew else "Выключено"
-            await query.answer(f"✅ Авто-продление: {status}")
-
-            # Refresh manage premium view
-            await manage_premium(query)
-
+            
+            text = (
+                "✅ **Авто-продление отменено**\n\n"
+                f"Ваша подписка {PREMIUM_TIERS[subscription.tier]['name']} "
+                f"будет действовать до {subscription.expires_at.strftime('%d.%m.%Y')}\n\n"
+                "После этой даты подписка не продлится автоматически."
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ К подпискам", callback_data="premium")],
+            ])
+            
+            try:
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            except Exception:
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            
+            await query.answer("✅ Авто-продление отменено")
+    
     except Exception as e:
-        logger.error(f"❌ Error in toggle_auto_renew: {e}", exc_info=True)
+        logger.error(f"❌ Error in premium_cancel_autorenew: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+async def check_expired_subscriptions():
+    """
+    Background task to check and expire subscriptions.
+    Run this periodically (e.g., every hour).
+    """
+    try:
+        async with get_session() as session:
+            now = datetime.utcnow()
+            
+            # Get expired subscriptions
+            query = select(Subscription).where(
+                Subscription.status == 'active',
+                Subscription.expires_at < now
+            )
+            result = await session.execute(query)
+            expired_subs = result.scalars().all()
+            
+            for sub in expired_subs:
+                # Get user
+                user_query = select(User).where(User.id == sub.user_id)
+                user_result = await session.execute(user_query)
+                user = user_result.scalar_one()
+                
+                if sub.auto_renew:
+                    # Try to renew
+                    tier = PREMIUM_TIERS[sub.tier]
+                    if float(user.ton_balance) >= tier['price_ton']:
+                        # Renew subscription
+                        user.ton_balance -= Decimal(str(tier['price_ton']))
+                        sub.expires_at = now + timedelta(days=30)
+                        
+                        # Log transaction
+                        transaction = CoinTransaction(
+                            user_id=user.id,
+                            amount=-tier['price_ton'],
+                            transaction_type='premium_renewal',
+                            description=f'Продление {tier["name"]} подписки'
+                        )
+                        session.add(transaction)
+                        
+                        logger.info(f"✅ Auto-renewed subscription for user {user.telegram_id}")
+                    else:
+                        # Not enough balance - expire
+                        sub.status = 'expired'
+                        sub.auto_renew = False
+                        user.is_premium = False
+                        user.premium_until = None
+                        logger.info(f"⚠️ Failed to renew subscription for user {user.telegram_id} - insufficient balance")
+                else:
+                    # Just expire
+                    sub.status = 'expired'
+                    user.is_premium = False
+                    user.premium_until = None
+                    logger.info(f"✅ Expired subscription for user {user.telegram_id}")
+            
+            await session.commit()
+            
+            logger.info(f"✅ Checked {len(expired_subs)} expired subscriptions")
+    
+    except Exception as e:
+        logger.error(f"❌ Error in check_expired_subscriptions: {e}", exc_info=True)
