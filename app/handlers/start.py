@@ -1,183 +1,150 @@
-"""Start command handler."""
+"""Start command handler with referral support."""
 import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command
-from sqlalchemy.ext.asyncio import AsyncSession
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from aiogram.filters import CommandStart
 from sqlalchemy import select
 from app.database.db import get_session
-from app.database.models import User
+from app.database.models import User, CoinTransaction
 from datetime import datetime
-from app.keyboards.main_menu import get_main_menu
-from app.keyboards.persistent_menu import get_persistent_menu
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from config import settings
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-# Экономические константы
-STARTING_BONUS = 3000  # Стартовый бонус
-REFERRAL_BONUS_REFERRER = 100  # Бонус рефереру (уменьшено с 1000)
-REFERRAL_BONUS_REFERRED = 50   # Бонус новому игроку (уменьшено с 500)
+REFERRAL_BONUS = 500  # Bonus for both referrer and referred user
 
 
-@router.message(Command("start"))
+@router.message(CommandStart())
 async def cmd_start(message: Message):
     """
-    Start command handler with improved economy.
+    Handle /start command with referral support.
+    Format: /start or /start ref_123456
     """
     try:
-        # Check for referral code
+        user_id = message.from_user.id
+        username = message.from_user.username
+        first_name = message.from_user.first_name
+        
+        # Extract referral code if present
         referrer_id = None
-        if len(message.text.split()) > 1:
+        args = message.text.split()
+        if len(args) > 1 and args[1].startswith('ref_'):
             try:
-                referrer_id = int(message.text.split()[1])
+                referrer_id = int(args[1].replace('ref_', ''))
             except ValueError:
-                pass
+                logger.warning(f"⚠️ Invalid referral code: {args[1]}")
         
         async with get_session() as session:
             # Check if user exists
-            query = select(User).where(User.telegram_id == message.from_user.id)
+            query = select(User).where(User.telegram_id == user_id)
             result = await session.execute(query)
             user = result.scalar_one_or_none()
             
+            is_new_user = False
+            
             if not user:
-                # Calculate starting coins
-                starting_coins = STARTING_BONUS
-                referral_bonus = 0
+                # Create new user
+                user = User(
+                    telegram_id=user_id,
+                    username=username,
+                    first_name=first_name,
+                    coins=1000,  # Starting bonus
+                    ton_balance=0,
+                    level=1,
+                    experience=0
+                )
                 
-                # Check if referrer exists
-                referrer = None
-                if referrer_id:
+                # Process referral if present
+                if referrer_id and referrer_id != user_id:
+                    # Find referrer
                     referrer_query = select(User).where(User.telegram_id == referrer_id)
                     referrer_result = await session.execute(referrer_query)
                     referrer = referrer_result.scalar_one_or_none()
                     
                     if referrer:
-                        # Give bonus to both
-                        referral_bonus = REFERRAL_BONUS_REFERRED
-                        starting_coins += referral_bonus
-                        referrer.coins += REFERRAL_BONUS_REFERRER
-                        logger.info(f"✅ Referral bonus: {referrer_id} +{REFERRAL_BONUS_REFERRER}, new user +{referral_bonus}")
+                        # Set referral relationship
+                        user.referred_by = referrer_id
+                        
+                        # Give bonus to referrer
+                        referrer.coins += REFERRAL_BONUS
+                        referrer.referred_count += 1
+                        referrer.referral_earnings_tier1 = (referrer.referral_earnings_tier1 or 0) + REFERRAL_BONUS
+                        
+                        # Give bonus to new user
+                        user.coins += REFERRAL_BONUS
+                        
+                        # Log transactions
+                        session.add(CoinTransaction(
+                            user_id=referrer.id,
+                            amount=REFERRAL_BONUS,
+                            transaction_type='referral_bonus',
+                            description=f'Бонус за приглашение @{username or user_id}'
+                        ))
+                        
+                        session.add(CoinTransaction(
+                            user_id=user.id,
+                            amount=REFERRAL_BONUS,
+                            transaction_type='referral_bonus',
+                            description=f'Бонус за регистрацию по реферальной ссылке'
+                        ))
+                        
+                        logger.info(f"✅ Referral: {referrer_id} invited {user_id}")
                 
-                # Create new user
-                user = User(
-                    telegram_id=message.from_user.id,
-                    username=message.from_user.username,
-                    first_name=message.from_user.first_name,
-                    coins=float(starting_coins),
-                    ton_balance=0.0,
-                    created_at=datetime.utcnow(),
-                    referred_by=referrer_id if referrer else None,
-                )
                 session.add(user)
                 await session.commit()
+                await session.refresh(user)
                 
-                # Notify referrer
-                if referrer:
-                    try:
-                        from aiogram import Bot
-                        bot = message.bot
-                        await bot.send_message(
-                            referrer.telegram_id,
-                            f"🎉 **По вашей ссылке зарегистрировался новый игрок!**\n\n"
-                            f"💰 Получено: {REFERRAL_BONUS_REFERRER} коинов",
-                            parse_mode="markdown"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Could not notify referrer: {e}")
-                
-                welcome_text = (
-                    f"🐻 **Лавы в БеарсМани!**\n\n"
-                    f"🎉 Привет, {message.from_user.first_name}!\n\n"
-                    f"🐻 **Что ты можешь делать:**\n"
-                    f"• 🐻 Покупать медведей (приносят пассивный доход)\n"
-                    f"• ⬆️ Улучшать их для большего дохода\n"
-                    f"• 💰 Выводить заработанные коины\n"
-                    f"• 👥 Приглашать друзей и получать бонусы\n\n"
+                is_new_user = True
+                logger.info(f"✅ New user registered: {user_id} (@{username})")
+            
+            # Welcome message
+            if is_new_user:
+                text = (
+                    f"👋 **Добро пожаловать, {first_name}!**\n\n"
+                    f"🐻 Добро пожаловать в **BearsMoney** - игру, где медведи зарабатывают деньги!\n\n"
+                    f"🎁 **Стартовый бонус:** {user.coins:,.0f} Coins\n"
                 )
                 
-                if referral_bonus > 0:
-                    welcome_text += (
-                        f"🎁 **Стартовый капитал:**\n"
-                        f"├ 🎁 Базовый бонус: {STARTING_BONUS} коинов\n"
-                        f"├ 👥 Реферальный бонус: {referral_bonus} коинов\n"
-                        f"└ 💰 **Итого: {starting_coins} коинов!**\n\n"
-                    )
-                else:
-                    welcome_text += f"🎁 **Стартовый бонус: {starting_coins} коинов!**\n\n"
+                if user.referred_by:
+                    text += f"\n🎉 +{REFERRAL_BONUS:,} Coins за регистрацию по реферальной ссылке!\n"
                 
-                welcome_text += (
-                    f"💡 **Совет:**\n"
-                    f"Начни с покупки 5 обычных медведей (600 коинов каждый).\n"
-                    f"Они будут приносить тебе пассивный доход!\n\n"
-                    f"👉 Нажми '🛍️ Магазин' чтобы начать!"
+                text += (
+                    f"\n🚀 **Начни играть:**\n"
+                    f"• 🐻 Покупай медведей\n"
+                    f"• 💰 Зарабатывай Coins\n"
+                    f"• 💎 Обменивай на TON\n"
+                    f"• 👥 Приглашай друзей\n"
                 )
                 
-                logger.info(f"🐻 New user: {message.from_user.id} | Start: {starting_coins} coins | Ref: {referrer_id or 'None'}")
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📚 Пройти обучение", callback_data="tutorial")],
+                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
+                ])
             else:
-                # User already exists
-                welcome_text = (
-                    f"🐻 **С возвращением!**\n\n"
-                    f"💰 **Основное меню**\n\n"
-                    f"👤 @{message.from_user.username or 'User'}\n"
-                    f"🪙 Баланс: {user.coins:.0f} коинов\n"
-                    f"💎 TON: {user.ton_balance:.4f}\n"
-                    f"⭐ Уровень: {user.level}"
+                # Returning user
+                text = (
+                    f"👋 **С возвращением, {first_name}!**\n\n"
+                    f"💼 Баланс: {user.coins:,.0f} Coins\n"
+                    f"💎 TON: {float(user.ton_balance):.4f}\n"
                 )
-                logger.info(f"🐻 User returned: {message.from_user.id}")
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
+                ])
             
-            await message.answer(
-                welcome_text,
-                reply_markup=get_main_menu(),
-                parse_mode="markdown"
-            )
-            
-            # Add persistent menu button
-            await message.answer(
-                "👇 Используйте кнопку ниже для быстрого возврата в меню:",
-                reply_markup=get_persistent_menu()
-            )
-            
+            await message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+    
     except Exception as e:
         logger.error(f"❌ Error in cmd_start: {e}", exc_info=True)
         await message.answer(
-            f"❌ Ошибка при инициализации.\n\n"
-            f"Технические детали: {str(e)}"
+            "❌ Произошла ошибка. Попробуйте ещё раз."
         )
-
-
-@router.message(F.text == "🏠 Главное меню")
-async def persistent_menu_button(message: Message):
-    """
-    Handle persistent menu button click.
-    """
-    try:
-        async with get_session() as session:
-            user_query = select(User).where(User.telegram_id == message.from_user.id)
-            user_result = await session.execute(user_query)
-            user = user_result.scalar_one()
-            
-            text = (
-                f"🐻 **Лавы в БеарсМани!**\n\n"
-                f"💰 **Основное меню**\n\n"
-                f"👤 @{message.from_user.username or 'User'}\n"
-                f"🪙 Баланс: {user.coins:.0f} коинов\n"
-                f"💎 TON: {user.ton_balance:.4f}\n"
-                f"⭐ Уровень: {user.level}"
-            )
-            
-            await message.answer(text, reply_markup=get_main_menu(), parse_mode="markdown")
-    except Exception as e:
-        logger.error(f"❌ Error in persistent_menu_button: {e}", exc_info=True)
-        await message.answer(f"❌ Ошибка: {str(e)}")
 
 
 @router.callback_query(F.data == "main_menu")
-async def main_menu_callback(query: CallbackQuery):
+async def main_menu(query: CallbackQuery):
     """
-    Return to main menu.
+    Show main menu.
     """
     try:
         async with get_session() as session:
@@ -186,113 +153,42 @@ async def main_menu_callback(query: CallbackQuery):
             user = user_result.scalar_one()
             
             text = (
-                f"🐻 **Лавы в БеарсМани!**\n\n"
-                f"💰 **Основное меню**\n\n"
-                f"👤 @{query.from_user.username or 'User'}\n"
-                f"🪙 Баланс: {user.coins:.0f} коинов\n"
-                f"💎 TON: {user.ton_balance:.4f}\n"
-                f"⭐ Уровень: {user.level}"
-            )
-            
-            try:
-                await query.message.edit_text(text, reply_markup=get_main_menu(), parse_mode="markdown")
-            except Exception:
-                await query.message.answer(text, reply_markup=get_main_menu(), parse_mode="markdown")
-            
-            await query.answer()
-    except Exception as e:
-        logger.error(f"❌ Error in main_menu_callback: {e}", exc_info=True)
-        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
-
-
-# ============ QUESTS ============
-
-@router.callback_query(F.data == "quests")
-async def quests_menu(query: CallbackQuery):
-    """
-    Show quests menu (placeholder).
-    """
-    try:
-        text = (
-            "📋 **Квесты**\n\n"
-            "🚧 Функция в разработке!\n\n"
-            "🔜 Скоро здесь появятся:"
-            "• ✅ Ежедневные квесты\n"
-            "• ✅ Недельные задания\n"
-            "• ✅ Специальные ачивки\n"
-            "• ✅ Награды за выполнение\n\n"
-            "👍 Следите за обновлениями!"
-        )
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
-        ])
-        
-        try:
-            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
-        except Exception:
-            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
-        
-        await query.answer()
-    except Exception as e:
-        logger.error(f"❌ Error in quests_menu: {e}", exc_info=True)
-        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
-
-
-# ============ REFERRALS ============
-
-@router.callback_query(F.data == "referrals")
-async def referrals_menu(query: CallbackQuery):
-    """
-    Show referrals system.
-    """
-    try:
-        async with get_session() as session:
-            user_query = select(User).where(User.telegram_id == query.from_user.id)
-            user_result = await session.execute(user_query)
-            user = user_result.scalar_one()
-            
-            # Get direct referrals
-            referrals_query = select(User).where(User.referred_by == user.telegram_id)
-            referrals_result = await session.execute(referrals_query)
-            referrals = referrals_result.scalars().all()
-            
-            # Generate referral link using bot username from config
-            bot_username = settings.BOT_USERNAME
-            referral_link = f"https://t.me/{bot_username}?start={user.telegram_id}"
-            
-            text = (
-                f"👥 **Реферальная система**\n\n"
-                f"🔗 **Ваша ссылка:**\n"
-                f"`{referral_link}`\n\n"
-                f"💰 **Ваши бонусы:**\n"
-                f"• 🎁 За каждого друга: **{REFERRAL_BONUS_REFERRER} коинов**\n"
-                f"• 🎁 Ваш друг получит: **{REFERRAL_BONUS_REFERRED} коинов**\n\n"
-            )
-            
-            # Referrals list
-            text += f"👥 **Ваши рефералы** ({len(referrals)} чел.)\n"
-            if referrals:
-                earned = len(referrals) * REFERRAL_BONUS_REFERRER
-                text += f"💰 Заработано: {earned} коинов\n\n"
-                for idx, ref in enumerate(referrals[:5], 1):
-                    status = "✅" if ref.coins > 1000 else "🔵"
-                    text += f"{idx}. {status} @{ref.username or ref.first_name}\n"
-                if len(referrals) > 5:
-                    text += f"и ещё {len(referrals) - 5}...\n"
-            else:
-                text += "Пусто. Пригласи друзей!\n"
-            
-            text += (
-                f"\n👉 **Как это работает:**\n"
-                f"1. Поделись ссылкой с друзьями\n"
-                f"2. Когда они зарегистрируются - получишь бонус!\n"
-                f"3. Чем больше друзей - тем больше коинов!"
+                f"🏠 **Главное меню**\n\n"
+                f"👤 {query.from_user.first_name}\n"
+                f"💼 Баланс: {user.coins:,.0f} Coins\n"
+                f"💎 TON: {float(user.ton_balance):.4f}\n"
+                f"⭐ Уровень: {user.level}\n"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📤 Поделиться", url=f"https://t.me/share/url?url={referral_link}&text=Присоединяйся к БеарсМани!")],
-                [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
+                [
+                    InlineKeyboardButton(text="🐻 Медведи", callback_data="bears"),
+                    InlineKeyboardButton(text="🛒 Магазин", callback_data="shop"),
+                ],
+                [
+                    InlineKeyboardButton(text="🎲 Кейсы", callback_data="cases"),
+                    InlineKeyboardButton(text="💱 Обмен", callback_data="exchange"),
+                ],
+                [
+                    InlineKeyboardButton(text="🎉 Ежедневно", callback_data="daily_rewards"),
+                    InlineKeyboardButton(text="📺 Реклама", callback_data="watch_ad"),
+                ],
+                [
+                    InlineKeyboardButton(text="⭐ Premium", callback_data="premium"),
+                    InlineKeyboardButton(text="🖼️ NFT", callback_data="nft_marketplace"),
+                ],
+                [
+                    InlineKeyboardButton(text="⚔️ PvP", callback_data="pvp_battles"),
+                    InlineKeyboardButton(text="🔧 Улучшения", callback_data="bear_upgrades"),
+                ],
+                [
+                    InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
+                    InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+                ],
+                [
+                    InlineKeyboardButton(text="📚 Обучение", callback_data="tutorial"),
+                    InlineKeyboardButton(text="🤝 Партнёры", callback_data="partnerships"),
+                ],
             ])
             
             try:
@@ -301,6 +197,7 @@ async def referrals_menu(query: CallbackQuery):
                 await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
             
             await query.answer()
+    
     except Exception as e:
-        logger.error(f"❌ Error in referrals_menu: {e}", exc_info=True)
+        logger.error(f"❌ Error in main_menu: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)

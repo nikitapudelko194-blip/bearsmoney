@@ -23,22 +23,68 @@ def setup_handlers():
     """
     try:
         # Import handlers
-        from app.handlers import start, bears, shop, profile, admin, cases, exchange, payment
+        from app.handlers import (
+            start, 
+            bears, 
+            shop, 
+            profile, 
+            admin, 
+            cases, 
+            exchange, 
+            payment,
+            daily_rewards,
+            premium,
+            nft,
+            ads,
+            bear_upgrades,
+            pvp,
+            tutorial,
+            partnerships
+        )
         
-        # Register routers
-        dp.include_router(start.router)
+        # Register routers (order matters!)
+        dp.include_router(start.router)  # Must be first for /start command
+        dp.include_router(tutorial.router)
+        dp.include_router(daily_rewards.router)
         dp.include_router(bears.router)
+        dp.include_router(bear_upgrades.router)
         dp.include_router(shop.router)
+        dp.include_router(cases.router)
         dp.include_router(profile.router)
         dp.include_router(exchange.router)
-        dp.include_router(payment.router)  # Payment system
-        dp.include_router(admin.router)
-        dp.include_router(cases.router)
+        dp.include_router(payment.router)
+        dp.include_router(premium.router)
+        dp.include_router(nft.router)
+        dp.include_router(ads.router)
+        dp.include_router(pvp.router)
+        dp.include_router(partnerships.router)
+        dp.include_router(admin.router)  # Admin must be last
         
         logger.info("✅ All handlers registered successfully")
     except Exception as e:
         logger.error(f"❌ Error setting up handlers: {e}", exc_info=True)
         raise
+
+
+def setup_middlewares():
+    """
+    Setup middlewares (rate limiting, logging, etc.).
+    """
+    try:
+        from app.middlewares.rate_limit import RateLimitMiddleware
+        from app.middlewares.logging_middleware import LoggingMiddleware
+        
+        # Add rate limiting
+        dp.message.middleware(RateLimitMiddleware())
+        dp.callback_query.middleware(RateLimitMiddleware())
+        
+        # Add logging
+        dp.message.middleware(LoggingMiddleware())
+        dp.callback_query.middleware(LoggingMiddleware())
+        
+        logger.info("✅ Middlewares setup completed")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not setup middlewares: {e}")
 
 
 async def setup_bot():
@@ -57,6 +103,18 @@ async def setup_bot():
         setup_handlers()
         logger.info("✅ Handlers setup completed")
         
+        # Setup middlewares
+        logger.info("🔧 Setting up middlewares...")
+        setup_middlewares()
+        
+        # Initialize services
+        logger.info("🔧 Initializing services...")
+        from app.services.notifications import init_notification_service
+        await init_notification_service(bot)
+        logger.info("✅ Services initialized")
+        
+        logger.info("🚀 Bot setup completed successfully!")
+        
     except Exception as e:
         logger.error(f"❌ Error in setup_bot: {e}", exc_info=True)
         raise
@@ -71,5 +129,9 @@ async def close_bot():
         from app.database.db import close_db
         await close_db()
         logger.info("✅ Database connection closed")
+        
+        # Close bot session
+        await bot.session.close()
+        logger.info("✅ Bot session closed")
     except Exception as e:
-        logger.error(f"❌ Error closing database: {e}", exc_info=True)
+        logger.error(f"❌ Error closing bot: {e}", exc_info=True)
