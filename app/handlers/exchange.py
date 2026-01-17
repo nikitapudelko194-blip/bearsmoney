@@ -42,8 +42,11 @@ async def exchange_menu(query: CallbackQuery):
             user = user_result.scalar_one()
             
             # Exchange rate from config
-            rate = settings.COIN_TO_TON_RATE  # 0.000002 TON per coin
-            coins_per_ton = int(1 / rate)  # 500,000 coins per TON
+            rate = settings.COIN_TO_TON_RATE
+            coins_per_ton = int(1 / rate)
+            
+            # Debug logging
+            logger.info(f"🔍 Exchange menu: rate={rate}, coins_per_ton={coins_per_ton}")
             
             text = (
                 f"💱 **Обмен валюты**\n\n"
@@ -154,11 +157,14 @@ async def process_coin_amount(message: Message, state: FSMContext):
                 await message.answer(f"❌ Недостаточно Coins. Доступно: {user.coins:,.0f}")
                 return
             
-            # Calculate TON amount - AUTOMATIC CALCULATION
+            # Calculate TON amount
             rate = settings.COIN_TO_TON_RATE
             ton_amount = amount * rate
-            ton_amount_decimal = Decimal(str(ton_amount))  # Convert to Decimal for arithmetic
+            ton_amount_decimal = Decimal(str(ton_amount))
             coins_per_ton = int(1 / rate)
+            
+            # Debug logging
+            logger.info(f"🔍 Exchange calculation: {amount} coins × {rate} = {ton_amount} TON")
             
             text = (
                 f"✅ **Подтвердите обмен**\n\n"
@@ -231,6 +237,8 @@ async def confirm_coins_to_ton(query: CallbackQuery, state: FSMContext):
             session.add(transaction_spend)
             
             await session.commit()
+            
+            logger.info(f"✅ Exchange completed: {coin_amount} coins → {ton_amount:.4f} TON (user {user.telegram_id})")
             
             text = (
                 f"✅ **Обмен выполнен!**\n\n"
@@ -335,7 +343,7 @@ async def process_ton_amount(message: Message, state: FSMContext):
                 await message.answer(f"❌ Недостаточно TON. Доступно: {float(user.ton_balance):.4f}")
                 return
             
-            # Calculate coins amount - AUTOMATIC CALCULATION
+            # Calculate coins amount
             rate = settings.COIN_TO_TON_RATE
             coins_amount = amount / rate
             coins_per_ton = int(1 / rate)
