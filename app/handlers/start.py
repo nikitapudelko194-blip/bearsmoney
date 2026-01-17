@@ -11,6 +11,7 @@ from datetime import datetime
 from app.keyboards.main_menu import get_main_menu
 from app.keyboards.persistent_menu import get_persistent_menu
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from config import settings
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -256,8 +257,8 @@ async def referrals_menu(query: CallbackQuery):
             referrals_result = await session.execute(referrals_query)
             referrals = referrals_result.scalars().all()
             
-            # Generate referral link
-            bot_username = "bearsmoney_bot"  # TODO: Get from config
+            # Generate referral link using bot username from config
+            bot_username = settings.BOT_USERNAME
             referral_link = f"https://t.me/{bot_username}?start={user.telegram_id}"
             
             text = (
