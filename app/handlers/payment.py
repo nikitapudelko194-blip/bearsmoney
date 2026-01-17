@@ -6,6 +6,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, CoinTransaction
@@ -523,27 +524,69 @@ async def confirm_ton_payment(query: CallbackQuery):
                 [InlineKeyboardButton(text="❌ Отклонить", callback_data=f"admin_reject:{payment_id}")],
             ])
             
+            # Try to send to admin with better error handling
+            admin_notified = False
+            error_message = ""
+            
             try:
+                logger.info(f"📤 Attempting to send admin notification to {ADMIN_ID}")
                 await query.bot.send_message(
                     chat_id=ADMIN_ID,
                     text=admin_text,
                     reply_markup=admin_keyboard,
                     parse_mode="markdown"
                 )
+                admin_notified = True
+                logger.info(f"✅ Admin notification sent successfully to {ADMIN_ID}")
+            except TelegramForbiddenError as e:
+                error_message = f"Админ заблокировал бота (ID: {ADMIN_ID})"
+                logger.error(f"❌ Admin blocked the bot: {e}")
+            except TelegramBadRequest as e:
+                error_message = f"Неверный ID админа или бот не может отправить сообщение (ID: {ADMIN_ID})"
+                logger.error(f"❌ Bad request to admin: {e}")
             except Exception as e:
-                logger.error(f"Failed to notify admin: {e}")
+                error_message = f"Ошибка отправки админу: {str(e)}"
+                logger.error(f"❌ Failed to notify admin: {e}", exc_info=True)
             
             # Notify user
-            user_text = (
-                f"✅ **Заявка отправлена!**\n\n"
-                f"💎 Ваша заявка на пополнение {package['name']} отправлена администратору.\n\n"
-                f"⏳ Платёж будет проверен в течение нескольких минут.\n"
-                f"🔔 Вы получите уведомление после проверки.\n\n"
-                f"Спасибо за ожидание!"
-            )
-            
-            await query.message.edit_text(user_text, parse_mode="markdown")
-            await query.answer("✅ Заявка отправлена администратору!")
+            if admin_notified:
+                user_text = (
+                    f"✅ **Заявка отправлена!**\n\n"
+                    f"💎 Ваша заявка на пополнение {package['name']} отправлена администратору.\n\n"
+                    f"⏳ Платёж будет проверен в течение нескольких минут.\n"
+                    f"🔔 Вы получите уведомление после проверки.\n\n"
+                    f"Спасибо за ожидание!"
+                )
+                await query.message.edit_text(user_text, parse_mode="markdown")
+                await query.answer("✅ Заявка отправлена администратору!")
+            else:
+                # Admin notification failed - inform user
+                user_text = (
+                    f"⚠️ **Заявка создана, но есть проблема**\n\n"
+                    f"💎 Пакет: {package['name']}\n"
+                    f"💵 Сумма: {package['ton_crypto']} TON\n\n"
+                    f"❌ **Проблема:**\n"
+                    f"{error_message}\n\n"
+                    f"📝 **Ваш Payment ID:**\n"
+                    f"`{payment_id}`\n\n"
+                    f"💡 **Что делать:**\n"
+                    f"1. Сохраните Payment ID\n"
+                    f"2. Обратитесь в поддержку\n"
+                    f"3. Укажите этот ID и скриншот перевода\n\n"
+                    f"⚙️ Админ ID в настройках: `{ADMIN_ID}`"
+                )
+                await query.message.edit_text(user_text, parse_mode="markdown")
+                await query.answer(
+                    f"⚠️ Проблема с уведомлением админа! Обратитесь в поддержку. ID: {payment_id}",
+                    show_alert=True
+                )
+                logger.error(
+                    f"❌ ADMIN NOTIFICATION FAILED! "
+                    f"Payment ID: {payment_id}, "
+                    f"User: {user.telegram_id}, "
+                    f"Admin ID: {ADMIN_ID}, "
+                    f"Error: {error_message}"
+                )
             
     except Exception as e:
         logger.error(f"❌ Error in confirm_ton_payment: {e}", exc_info=True)
