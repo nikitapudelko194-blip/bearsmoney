@@ -19,7 +19,7 @@ except Exception as e:
 try:
     logging.basicConfig(
         level=getattr(logging, settings.LOG_LEVEL),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        format='%(asctime)s - %(levelname)s - %(message)s',  # Simplified format
         handlers=[
             logging.FileHandler(settings.LOG_DIR / 'bot.log', encoding='utf-8'),
             logging.StreamHandler()
@@ -29,7 +29,7 @@ except Exception as e:
     print(f"❌ Error setting up logging: {e}")
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
 logger = logging.getLogger(__name__)
@@ -40,26 +40,12 @@ async def main():
     Main function - start bot polling.
     """
     try:
-        logger.info("="*60)
         logger.info("🐻 Starting BearsMoney Bot...")
-        logger.info("="*60)
-        
-        # Проверка обязательных параметров
-        if not settings.BOT_TOKEN:
-            raise ValueError("❌ BOT_TOKEN не установлен в .env файле!")
-        
-        logger.info(f"✅ BOT_TOKEN: {settings.BOT_TOKEN[:20]}...")
-        logger.info(f"✅ ADMIN_ID: {settings.ADMIN_ID}")
-        logger.info(f"✅ DATABASE_URL: {settings.DATABASE_URL}")
-        logger.info(f"✅ DEBUG: {settings.DEBUG}")
         
         # Setup bot
-        logger.info("🔧 Setting up bot...")
         await setup_bot()
-        logger.info("✅ Bot setup completed")
         
-        logger.info("📡 Starting polling...")
-        logger.info("🤖 Bot is running! Send /start to test")
+        logger.info("📡 Bot is running! Send /start to test")
         logger.info("Press Ctrl+C to stop")
         
         # Start polling
@@ -83,12 +69,11 @@ async def main():
 if __name__ == "__main__":
     try:
         print("""
-╔════════════════════════════════════════════════════════╗
-║          🐻 БеарсМани - Telegram Bot                  ║
-║                                                        ║
-║  Запуск бота...                                        ║
-║  Если видите ошибки - проверьте .env файл            ║
-╚════════════════════════════════════════════════════════╝
+╭────────────────────────────────────────────────────────╮
+│       🐻 БеарсМани - Telegram Bot              │
+│                                                      │
+│  Запуск бота...                                    │
+╰────────────────────────────────────────────────────────╯
         """)
         asyncio.run(main())
     except KeyboardInterrupt:
