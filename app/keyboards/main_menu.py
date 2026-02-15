@@ -18,21 +18,16 @@ def get_main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📊 P2P Маркет", callback_data="p2p_market"),
             InlineKeyboardButton(text="📋 Квесты", callback_data="quests"),
         ],
-        # Row 3 - Finance
+        # Row 3 - Buy TON (donation)
         [
-            InlineKeyboardButton(text="💱 Обмен", callback_data="exchange"),
-            InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw"),
+            InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="buy_ton"),
         ],
-        # Row 4 - Buy TON
-        [
-            InlineKeyboardButton(text="💳 Купить TON", callback_data="buy_ton"),
-        ],
-        # Row 5 - Social & Stats
+        # Row 4 - Social & Stats
         [
             InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
             InlineKeyboardButton(text="📈 Статистика", callback_data="stats"),
         ],
-        # Row 6 - Account
+        # Row 5 - Account
         [
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
             InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
