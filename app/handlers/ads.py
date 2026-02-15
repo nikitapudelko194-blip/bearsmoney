@@ -1,9 +1,10 @@
-"""In-game advertising handlers."""
+"""In-game advertising system."""
 import logging
 from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, CoinTransaction
 
@@ -12,20 +13,7 @@ router = Router()
 
 # Ad rewards
 AD_REWARD_COINS = 100
-MAX_ADS_PER_DAY = 10
-
-
-async def get_ads_watched_today(user_id: int, session) -> int:
-    """Get number of ads watched today."""
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    query = select(func.count(CoinTransaction.id)).where(
-        CoinTransaction.user_id == user_id,
-        CoinTransaction.transaction_type == 'ad_reward',
-        CoinTransaction.created_at >= today_start
-    )
-    result = await session.execute(query)
-    return result.scalar() or 0
+AD_DAILY_LIMIT = 10
 
 
 @router.callback_query(F.data == "watch_ad")
@@ -37,28 +25,35 @@ async def watch_ad_menu(query: CallbackQuery):
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
-            ads_today = await get_ads_watched_today(user.id, session)
-            ads_left = max(0, MAX_ADS_PER_DAY - ads_today)
+            # Count ads watched today
+            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            ads_query = select(CoinTransaction).where(
+                CoinTransaction.user_id == user.id,
+                CoinTransaction.transaction_type == 'ad_reward',
+                CoinTransaction.created_at >= today_start
+            )
+            ads_result = await session.execute(ads_query)
+            ads_watched = len(ads_result.scalars().all())
+            
+            remaining = AD_DAILY_LIMIT - ads_watched
             
             text = (
-                "📺 **Просмотр рекламы**\n\n"
-                f"💰 **Награда за просмотр:** {AD_REWARD_COINS} Coins\n"
-                f"👀 **Просмотрено сегодня:** {ads_today}/{MAX_ADS_PER_DAY}\n"
-                f"📊 **Осталось:** {ads_left} видео\n\n"
+                f"📺 **Реклама**\n\n"
+                f"Смотрите рекламу и получайте награды!\n\n"
+                f"🎁 **Награда:** {AD_REWARD_COINS} Coins\n"
+                f"📊 **Просмотрено сегодня:** {ads_watched}/{AD_DAILY_LIMIT}\n"
+                f"⏳ **Осталось:** {remaining} просмотров\n\n"
             )
             
-            if ads_left > 0:
-                text += "🎬 Нажмите кнопку ниже, чтобы посмотреть рекламу и получить награду!"
+            if remaining > 0:
+                text += "💡 Нажмите кнопку ниже, чтобы посмотреть рекламу!"
             else:
-                text += "⏰ Вы достигли дневного лимита. Приходите завтра!"
+                text += "⏰ Лимит исчерпан! Приходите завтра."
             
             keyboard = []
             
-            if ads_left > 0:
-                keyboard.append([InlineKeyboardButton(
-                    text="▶️ Смотреть рекламу",
-                    callback_data="watch_ad_confirm"
-                )])
+            if remaining > 0:
+                keyboard.append([InlineKeyboardButton(text="📺 Посмотреть рекламу", callback_data="do_watch_ad")])
             
             keyboard.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")])
             
@@ -76,19 +71,27 @@ async def watch_ad_menu(query: CallbackQuery):
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-@router.callback_query(F.data == "watch_ad_confirm")
-async def watch_ad_confirm(query: CallbackQuery):
-    """Simulate ad watching and give reward."""
+@router.callback_query(F.data == "do_watch_ad")
+async def do_watch_ad(query: CallbackQuery):
+    """Simulate watching ad and give reward."""
     try:
         async with get_session() as session:
             user_query = select(User).where(User.telegram_id == query.from_user.id)
             user_result = await session.execute(user_query)
             user = user_result.scalar_one()
             
-            ads_today = await get_ads_watched_today(user.id, session)
+            # Count ads watched today
+            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            ads_query = select(CoinTransaction).where(
+                CoinTransaction.user_id == user.id,
+                CoinTransaction.transaction_type == 'ad_reward',
+                CoinTransaction.created_at >= today_start
+            )
+            ads_result = await session.execute(ads_query)
+            ads_watched = len(ads_result.scalars().all())
             
-            if ads_today >= MAX_ADS_PER_DAY:
-                await query.answer("⏰ Дневной лимит достигнут!", show_alert=True)
+            if ads_watched >= AD_DAILY_LIMIT:
+                await query.answer("⏰ Лимит просмотров исчерпан!", show_alert=True)
                 return
             
             # Add reward
@@ -99,28 +102,27 @@ async def watch_ad_confirm(query: CallbackQuery):
                 user_id=user.id,
                 amount=AD_REWARD_COINS,
                 transaction_type='ad_reward',
-                description=f'Награда за просмотр рекламы'
+                description='Просмотр рекламы'
             )
             session.add(transaction)
             
             await session.commit()
             
-            ads_left = MAX_ADS_PER_DAY - ads_today - 1
+            remaining = AD_DAILY_LIMIT - ads_watched - 1
             
             text = (
-                "✅ **Спасибо за просмотр!**\n\n"
-                f"💰 Вы получили: {AD_REWARD_COINS} Coins\n"
+                f"✅ **Награда получена!**\n\n"
+                f"🎁 +{AD_REWARD_COINS} Coins\n"
                 f"💼 Новый баланс: {user.coins:,.0f} Coins\n\n"
-                f"📊 Осталось видео сегодня: {ads_left}\n"
+                f"📊 Просмотрено сегодня: {ads_watched + 1}/{AD_DAILY_LIMIT}\n"
+                f"⏳ Осталось: {remaining} просмотров\n\n"
+                f"💡 {'Смотрите еще!' if remaining > 0 else 'Приходите завтра!'}"
             )
             
             keyboard = []
             
-            if ads_left > 0:
-                keyboard.append([InlineKeyboardButton(
-                    text="▶️ Смотреть ещё",
-                    callback_data="watch_ad_confirm"
-                )])
+            if remaining > 0:
+                keyboard.append([InlineKeyboardButton(text="📺 Еще реклама", callback_data="do_watch_ad")])
             
             keyboard.append([InlineKeyboardButton(text="⬅️ В меню", callback_data="main_menu")])
             
@@ -131,10 +133,9 @@ async def watch_ad_confirm(query: CallbackQuery):
             except Exception:
                 await query.message.answer(text, reply_markup=reply_markup, parse_mode="markdown")
             
-            await query.answer("💰 +{} Coins!".format(AD_REWARD_COINS))
-            
-            logger.info(f"✅ User {user.telegram_id} watched ad and got {AD_REWARD_COINS} coins")
+            await query.answer("🎉 +100 Coins!")
+            logger.info(f"✅ User {user.telegram_id} watched ad, earned {AD_REWARD_COINS} coins")
     
     except Exception as e:
-        logger.error(f"❌ Error in watch_ad_confirm: {e}", exc_info=True)
+        logger.error(f"❌ Error in do_watch_ad: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
