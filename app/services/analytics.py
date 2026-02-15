@@ -1,125 +1,105 @@
-"""Analytics service for tracking user events and behavior."""
+"""Analytics and tracking system."""
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from app.database.models import User, CoinTransaction, Bear
+from app.database.models import User, Bear, CoinTransaction
 
 logger = logging.getLogger(__name__)
 
 
-class AnalyticsService:
-    """Analytics service for tracking and analyzing user behavior."""
+class Analytics:
+    """Analytics service for tracking events and metrics."""
     
-    def __init__(self, session):
-        self.session = session
-    
-    async def track_event(self, user_id: int, event_name: str, properties: Optional[Dict] = None):
-        """Track user event."""
-        try:
-            # Log event
-            logger.info(f"📊 Event: {event_name} - User: {user_id} - Props: {properties}")
-            
-            # In production: Send to analytics platform (Amplitude, Mixpanel, etc.)
-            # await self._send_to_analytics_platform(user_id, event_name, properties)
-            
-        except Exception as e:
-            logger.error(f"❌ Error tracking event: {e}", exc_info=True)
-    
-    async def get_retention_rate(self, days: int = 7) -> Dict:
-        """Calculate user retention rate."""
-        try:
-            now = datetime.utcnow()
-            start_date = now - timedelta(days=days)
-            
-            # Get total users registered in period
-            total_query = select(func.count(User.id)).where(
-                User.created_at >= start_date
-            )
-            total_result = await self.session.execute(total_query)
-            total_users = total_result.scalar() or 0
-            
-            if total_users == 0:
-                return {"retention_rate": 0, "total_users": 0, "active_users": 0}
-            
-            # Get active users (users who made transactions in last 24h)
-            active_date = now - timedelta(days=1)
-            active_query = select(func.count(func.distinct(CoinTransaction.user_id))).where(
-                CoinTransaction.created_at >= active_date
-            )
-            active_result = await self.session.execute(active_query)
-            active_users = active_result.scalar() or 0
-            
-            retention_rate = (active_users / total_users) * 100 if total_users > 0 else 0
-            
-            return {
-                "retention_rate": round(retention_rate, 2),
-                "total_users": total_users,
-                "active_users": active_users,
-                "period_days": days
-            }
+    @staticmethod
+    async def track_event(session: AsyncSession, user_id: int, event_name: str, properties: dict = None):
+        """
+        Track user event.
         
-        except Exception as e:
-            logger.error(f"❌ Error calculating retention: {e}", exc_info=True)
-            return {"retention_rate": 0, "total_users": 0, "active_users": 0}
-    
-    async def get_user_ltv(self, user_id: int) -> float:
-        """Calculate user lifetime value."""
+        Args:
+            session: Database session
+            user_id: User ID
+            event_name: Event name (e.g., 'bear_purchased', 'case_opened')
+            properties: Additional event properties
+        """
         try:
-            # Get total spent
-            spent_query = select(func.sum(CoinTransaction.amount)).where(
+            # TODO: Save to analytics table or send to external service
+            logger.info(f"📊 Event tracked: {event_name} for user {user_id}, props: {properties}")
+        except Exception as e:
+            logger.error(f"❌ Error tracking event: {e}")
+    
+    @staticmethod
+    async def get_user_lifetime_value(session: AsyncSession, user_id: int) -> float:
+        """
+        Calculate user lifetime value (LTV).
+        """
+        try:
+            # Get total TON spent
+            ton_spent_query = select(func.sum(CoinTransaction.amount)).where(
                 CoinTransaction.user_id == user_id,
-                CoinTransaction.transaction_type == 'spend'
+                CoinTransaction.transaction_type.in_(['premium_purchase', 'nft_mint'])
             )
-            spent_result = await self.session.execute(spent_query)
-            total_spent = abs(spent_result.scalar() or 0)
+            result = await session.execute(ton_spent_query)
+            ton_spent = result.scalar() or 0
             
-            # In production: Calculate based on real money spent
-            # For now, use coins as proxy (1000 coins = $1)
-            ltv = total_spent / 1000
-            
-            return round(ltv, 2)
-        
+            return float(ton_spent)
         except Exception as e:
-            logger.error(f"❌ Error calculating LTV: {e}", exc_info=True)
+            logger.error(f"❌ Error calculating LTV: {e}")
             return 0.0
     
-    async def get_cohort_analysis(self, cohort_days: int = 30) -> List[Dict]:
-        """Perform cohort analysis."""
+    @staticmethod
+    async def get_retention_rate(session: AsyncSession, days: int = 7) -> float:
+        """
+        Calculate retention rate.
+        """
         try:
-            now = datetime.utcnow()
-            cohorts = []
-            
-            for i in range(cohort_days):
-                cohort_date = now - timedelta(days=i)
-                cohort_start = cohort_date.replace(hour=0, minute=0, second=0, microsecond=0)
-                cohort_end = cohort_start + timedelta(days=1)
-                
-                # Get users registered in this cohort
-                cohort_query = select(func.count(User.id)).where(
-                    User.created_at >= cohort_start,
-                    User.created_at < cohort_end
-                )
-                cohort_result = await self.session.execute(cohort_query)
-                cohort_size = cohort_result.scalar() or 0
-                
-                cohorts.append({
-                    "date": cohort_start.strftime("%Y-%m-%d"),
-                    "users": cohort_size,
-                    "day": i
-                })
-            
-            return cohorts
-        
+            # TODO: Implement retention calculation
+            return 0.0
         except Exception as e:
-            logger.error(f"❌ Error in cohort analysis: {e}", exc_info=True)
-            return []
+            logger.error(f"❌ Error calculating retention: {e}")
+            return 0.0
+    
+    @staticmethod
+    async def get_daily_active_users(session: AsyncSession) -> int:
+        """
+        Get daily active users count.
+        """
+        try:
+            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            query = select(func.count(User.id.distinct())).where(
+                User.updated_at >= today_start
+            )
+            result = await session.execute(query)
+            return result.scalar() or 0
+        except Exception as e:
+            logger.error(f"❌ Error getting DAU: {e}")
+            return 0
+    
+    @staticmethod
+    async def get_conversion_rate(session: AsyncSession) -> float:
+        """
+        Calculate free-to-paid conversion rate.
+        """
+        try:
+            # Total users
+            total_query = select(func.count(User.id))
+            total_result = await session.execute(total_query)
+            total_users = total_result.scalar() or 0
+            
+            # Paid users
+            paid_query = select(func.count(User.id)).where(User.is_premium == True)
+            paid_result = await session.execute(paid_query)
+            paid_users = paid_result.scalar() or 0
+            
+            if total_users == 0:
+                return 0.0
+            
+            return (paid_users / total_users) * 100
+        except Exception as e:
+            logger.error(f"❌ Error calculating conversion: {e}")
+            return 0.0
 
 
-# Global analytics instance
-analytics = None
-
-
-async def get_analytics(session):
-    """Get analytics service instance."""
-    return AnalyticsService(session)
+# Singleton instance
+analytics = Analytics()

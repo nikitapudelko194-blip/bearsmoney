@@ -1,7 +1,8 @@
-"""Interactive onboarding tutorial handlers."""
+"""Onboarding tutorial system."""
 import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, CoinTransaction
@@ -11,155 +12,152 @@ router = Router()
 
 TUTORIAL_REWARD = 500  # Coins for completing tutorial
 
+# Tutorial steps
+TUTORIAL_STEPS = [
+    {
+        "step": 1,
+        "title": "👋 Добро пожаловать!",
+        "text": (
+            "Привет! 🐻\n\n"
+            "Я помогу тебе разобраться в Bears Money!\n\n"
+            "🎮 **Что это?**\n"
+            "Bears Money - это Telegram игра, где ты:\n"
+            "• Собираешь медведей\n"
+            "• Зарабатываешь Coins\n"
+            "• Обмениваешь на TON\n"
+            "• Соревнуешься с друзьями\n\n"
+            "💡 Нажми ‘Далее’, чтобы продолжить!"
+        ),
+    },
+    {
+        "step": 2,
+        "title": "🐻 Медведи",
+        "text": (
+            "🐻 **Медведи - твои работники!**\n\n"
+            "Каждый медведь приносит Coins каждый час!\n\n"
+            "🎯 **Редкости:**\n"
+            "• Common (обычные) - 1 к/ч\n"
+            "• Rare (редкие) - 5 к/ч\n"
+            "• Epic (эпические) - 15 к/ч\n"
+            "• Legendary (легендарные) - 50 к/ч\n\n"
+            "🔝 **Как получить?**\n"
+            "• Открывай кейсы\n"
+            "• Покупай в магазине\n"
+            "• Получай за рефералов"
+        ),
+    },
+    {
+        "step": 3,
+        "title": "💰 Заработок",
+        "text": (
+            "💰 **Как зарабатывать?**\n\n"
+            "🐻 **Медведи**\n"
+            "Автоматический доход каждый час!\n\n"
+            "🎁 **Ежедневные награды**\n"
+            "Заходи каждый день и получай бонусы!\n\n"
+            "👥 **Рефералы**\n"
+            "Приглашай друзей и получай % с их дохода!\n\n"
+            "📺 **Реклама**\n"
+            "Смотри рекламу = получай коины!\n\n"
+            "⚔️ **PvP батлы**\n"
+            "Соревнуйся с другими и выигрывай!"
+        ),
+    },
+    {
+        "step": 4,
+        "title": "💎 TON и Premium",
+        "text": (
+            "💎 **TON - реальная криптовалюта!**\n\n"
+            "🔄 **Обмен**\n"
+            "Coins ↔ TON в любое время!\n\n"
+            "⭐ **Premium подписка**\n"
+            "• +50% к доходу\n"
+            "• 0% комиссии\n"
+            "• Эксклюзивные кейсы\n"
+            "• Premium бейдж\n\n"
+            "🖼️ **NFT**\n"
+            "Минть редких медведей в NFT!\n"
+            "Продавай на маркетплейсе!"
+        ),
+    },
+    {
+        "step": 5,
+        "title": "🎆 Поздравляем!",
+        "text": (
+            "🎆 **Ты прошел обучение!**\n\n"
+            f"🎁 Награда: {TUTORIAL_REWARD} Coins\n\n"
+            "💡 **Советы:**\n"
+            "• Заходи каждый день\n"
+            "• Улучшай медведей\n"
+            "• Приглашай друзей\n"
+            "• Участвуй в событиях\n\n"
+            "🚀 Удачи в игре!"
+        ),
+    },
+]
 
-@router.callback_query(F.data == "tutorial")
-async def tutorial_start(query: CallbackQuery):
-    """Start interactive tutorial."""
+
+@router.callback_query(F.data == "start_tutorial")
+async def start_tutorial(query: CallbackQuery):
+    """Start tutorial."""
+    await show_tutorial_step(query, 1)
+
+
+@router.callback_query(F.data.startswith("tutorial_step_"))
+async def tutorial_step(query: CallbackQuery):
+    """Show tutorial step."""
+    step = int(query.data.split("_")[-1])
+    await show_tutorial_step(query, step)
+
+
+async def show_tutorial_step(query: CallbackQuery, step: int):
+    """Show specific tutorial step."""
     try:
+        step_data = next((s for s in TUTORIAL_STEPS if s["step"] == step), None)
+        
+        if not step_data:
+            await query.answer("❌ Шаг не найден!", show_alert=True)
+            return
+        
         text = (
-            "👋 **Добро пожаловать в BearsMoney!**\n\n"
-            "🐻 Я помогу тебе разобраться в игре.\n\n"
-            "🎯 **Ты узнаешь:**\n"
-            "• Как покупать медведей\n"
-            "• Как зарабатывать Coins\n"
-            "• Как обменивать на TON\n"
-            "• Как приглашать друзей\n\n"
-            f"🎁 **Награда:** {TUTORIAL_REWARD:,} Coins\n"
-            f"⏱️ **Время:** 2 минуты\n\n"
-            "🚀 Начнём?"
+            f"**{step_data['title']}**\n"
+            f"(Шаг {step}/{len(TUTORIAL_STEPS)})\n\n"
+            f"{step_data['text']}"
         )
         
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="▶️ Начать обучение", callback_data="tutorial_step_1")],
-            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="main_menu")]
-        ])
+        keyboard = []
+        
+        # Add navigation buttons
+        nav_buttons = []
+        if step > 1:
+            nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"tutorial_step_{step-1}"))
+        
+        if step < len(TUTORIAL_STEPS):
+            nav_buttons.append(InlineKeyboardButton(text="➡️ Далее", callback_data=f"tutorial_step_{step+1}"))
+        else:
+            nav_buttons.append(InlineKeyboardButton(text="✅ Завершить", callback_data="complete_tutorial"))
+        
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+        
+        keyboard.append([InlineKeyboardButton(text="❌ Пропустить", callback_data="main_menu")])
+        
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
         
         try:
-            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+            await query.message.edit_text(text, reply_markup=reply_markup, parse_mode="markdown")
         except Exception:
-            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            await query.message.answer(text, reply_markup=reply_markup, parse_mode="markdown")
         
         await query.answer()
     
     except Exception as e:
-        logger.error(f"❌ Error in tutorial_start: {e}", exc_info=True)
+        logger.error(f"❌ Error in show_tutorial_step: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
-@router.callback_query(F.data == "tutorial_step_1")
-async def tutorial_step_1(query: CallbackQuery):
-    """Tutorial step 1: Bears."""
-    text = (
-        "🐻 **Шаг 1: Медведи**\n\n"
-        "🌟 Медведи - твои работники!\n\n"
-        "📊 **Редкость:**\n"
-        "🟩 Common - 1 к/ч\n"
-        "🟦 Rare - 5 к/ч\n"
-        "🟪 Epic - 20 к/ч\n"
-        "🟧 Legendary - 100 к/ч\n\n"
-        "💰 Купи медведей в магазине!"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="▶️ Далее", callback_data="tutorial_step_2")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="tutorial")]
-    ])
-    
-    try:
-        await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
-    except Exception:
-        await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
-    
-    await query.answer()
-
-
-@router.callback_query(F.data == "tutorial_step_2")
-async def tutorial_step_2(query: CallbackQuery):
-    """Tutorial step 2: Earning."""
-    text = (
-        "🪙 **Шаг 2: Заработок**\n\n"
-        "⏰ Медведи зарабатывают Coins автоматически!\n\n"
-        "💡 **Способы заработка:**\n"
-        "• 🐻 Медведи (пассивный доход)\n"
-        "• 🎁 Ежедневные награды\n"
-        "• 🎰 Колесо фортуны\n"
-        "• 📺 Просмотр рекламы\n"
-        "• 👥 Рефералы (20% с друзей)\n\n"
-        "💪 Чем больше медведей, тем больше Coins!"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="▶️ Далее", callback_data="tutorial_step_3")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="tutorial_step_1")]
-    ])
-    
-    try:
-        await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
-    except Exception:
-        await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
-    
-    await query.answer()
-
-
-@router.callback_query(F.data == "tutorial_step_3")
-async def tutorial_step_3(query: CallbackQuery):
-    """Tutorial step 3: Exchange."""
-    text = (
-        "💱 **Шаг 3: Обмен**\n\n"
-        "💎 Обменивай Coins на TON!\n\n"
-        "📈 **Курс:**\n"
-        "1 TON = 500,000 Coins\n"
-        "1 Coin = 0.00000200 TON\n\n"
-        "📉 **Комиссия:** 2%\n\n"
-        "💸 Можно обменивать в обе стороны:\n"
-        "• Coins → TON\n"
-        "• TON → Coins\n\n"
-        "💼 Вывод TON на кошелёк доступен!"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="▶️ Далее", callback_data="tutorial_step_4")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="tutorial_step_2")]
-    ])
-    
-    try:
-        await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
-    except Exception:
-        await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
-    
-    await query.answer()
-
-
-@router.callback_query(F.data == "tutorial_step_4")
-async def tutorial_step_4(query: CallbackQuery):
-    """Tutorial step 4: Referrals."""
-    text = (
-        "👥 **Шаг 4: Рефералы**\n\n"
-        "🚀 Приглашай друзей и зарабатывай!\n\n"
-        "💰 **Вознаграждение:**\n"
-        "• 20% с дохода друга (1-й круг)\n"
-        "• 10% со 2-го круга\n"
-        "• 5% с 3-го круга\n\n"
-        "🎁 **Бонус:**\n"
-        "+ 500 Coins за каждого друга\n\n"
-        "🔗 Твоя реферальная ссылка в разделе '👥 Рефералы'!"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Завершить", callback_data="tutorial_complete")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="tutorial_step_3")]
-    ])
-    
-    try:
-        await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
-    except Exception:
-        await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
-    
-    await query.answer()
-
-
-@router.callback_query(F.data == "tutorial_complete")
-async def tutorial_complete(query: CallbackQuery):
+@router.callback_query(F.data == "complete_tutorial")
+async def complete_tutorial(query: CallbackQuery):
     """Complete tutorial and give reward."""
     try:
         async with get_session() as session:
@@ -175,27 +173,24 @@ async def tutorial_complete(query: CallbackQuery):
                 user_id=user.id,
                 amount=TUTORIAL_REWARD,
                 transaction_type='tutorial_reward',
-                description=f'Награда за прохождение обучения'
+                description='Награда за прохождение обучения'
             )
             session.add(transaction)
             
             await session.commit()
             
             text = (
-                "🎉 **Обучение завершено!**\n\n"
-                f"🎁 Ты получил: {TUTORIAL_REWARD:,} Coins\n"
+                f"🎉 **Поздравляем!**\n\n"
+                f"Ты успешно прошел обучение!\n\n"
+                f"🎁 Награда: +{TUTORIAL_REWARD} Coins\n"
                 f"💼 Новый баланс: {user.coins:,.0f} Coins\n\n"
-                "🚀 **Теперь ты готов:**\n"
-                "✅ Покупать медведей\n"
-                "✅ Зарабатывать Coins\n"
-                "✅ Обменивать на TON\n"
-                "✅ Приглашать друзей\n\n"
-                "💪 Удачи в игре!"
+                f"🚀 Теперь ты готов к игре!\n"
+                f"💡 Начни с покупки первого медведя!"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🛒 В магазин", callback_data="shop")],
-                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+                [InlineKeyboardButton(text="🛍️ В магазин", callback_data="shop")],
+                [InlineKeyboardButton(text="🎮 В меню", callback_data="main_menu")],
             ])
             
             try:
@@ -203,10 +198,9 @@ async def tutorial_complete(query: CallbackQuery):
             except Exception:
                 await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
             
-            await query.answer("🎉 Поздравляем!")
-            
-            logger.info(f"✅ User {user.telegram_id} completed tutorial and got {TUTORIAL_REWARD} coins")
+            await query.answer("🎉 +500 Coins!")
+            logger.info(f"✅ User {user.telegram_id} completed tutorial")
     
     except Exception as e:
-        logger.error(f"❌ Error in tutorial_complete: {e}", exc_info=True)
+        logger.error(f"❌ Error in complete_tutorial: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)

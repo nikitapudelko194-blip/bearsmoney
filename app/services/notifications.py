@@ -1,91 +1,87 @@
-"""Push notifications service."""
+"""Push notifications system."""
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from aiogram import Bot
-from sqlalchemy import select
-from app.database.models import User, Bear
-from config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class NotificationService:
-    """Service for sending push notifications to users."""
+    """Service for sending push notifications."""
     
     def __init__(self, bot: Bot):
         self.bot = bot
     
-    async def send_notification(
-        self,
-        telegram_id: int,
-        message: str,
-        parse_mode: str = "markdown"
-    ) -> bool:
-        """Send notification to user."""
+    async def send_daily_reward_reminder(self, user_telegram_id: int):
+        """
+        Send reminder about daily reward.
+        """
         try:
-            await self.bot.send_message(
-                chat_id=telegram_id,
-                text=message,
-                parse_mode=parse_mode
+            text = (
+                "🎁 **Не забудь забрать ежедневную награду!**\n\n"
+                "Твоя серия может оборваться, если ты не зайдешь сегодня! 🔥"
             )
-            logger.info(f"✅ Notification sent to user {telegram_id}")
-            return True
-        
+            await self.bot.send_message(
+                chat_id=user_telegram_id,
+                text=text,
+                parse_mode="markdown"
+            )
+            logger.info(f"✅ Sent daily reward reminder to user {user_telegram_id}")
         except Exception as e:
-            logger.error(f"❌ Error sending notification to {telegram_id}: {e}")
-            return False
+            logger.error(f"❌ Error sending daily reward reminder: {e}")
     
-    async def notify_daily_reward(self, telegram_id: int, streak_days: int):
-        """Notify user about available daily reward."""
-        message = (
-            f"🎉 **Ежедневная награда готова!**\n\n"
-            f"🔥 Текущая серия: {streak_days} дней\n\n"
-            f"🎁 Зайди в бот, чтобы забрать!"
-        )
-        return await self.send_notification(telegram_id, message)
+    async def send_coins_ready_notification(self, user_telegram_id: int, amount: float):
+        """
+        Notify user that coins are ready to collect.
+        """
+        try:
+            text = (
+                f"💰 **Медведи назаработали коины!**\n\n"
+                f"Забери {amount:,.0f} Coins прямо сейчас! 🐻"
+            )
+            await self.bot.send_message(
+                chat_id=user_telegram_id,
+                text=text,
+                parse_mode="markdown"
+            )
+            logger.info(f"✅ Sent coins ready notification to user {user_telegram_id}")
+        except Exception as e:
+            logger.error(f"❌ Error sending coins notification: {e}")
     
-    async def notify_coins_ready(self, telegram_id: int, coins_amount: float):
-        """Notify user that coins are ready to collect."""
-        message = (
-            f"🪙 **Монеты готовы!**\n\n"
-            f"🐻 Ваши медведи назаработали {coins_amount:,.0f} Coins!\n\n"
-            f"💰 Зайди в бот, чтобы забрать!"
-        )
-        return await self.send_notification(telegram_id, message)
+    async def send_premium_expiring_notification(self, user_telegram_id: int, hours_left: int):
+        """
+        Notify user that premium is expiring soon.
+        """
+        try:
+            text = (
+                f"⚠️ **Premium истекает!**\n\n"
+                f"Твоя подписка закончится через {hours_left} часов.\n"
+                "Продли сейчас, чтобы не потерять бонусы! 🌟"
+            )
+            await self.bot.send_message(
+                chat_id=user_telegram_id,
+                text=text,
+                parse_mode="markdown"
+            )
+            logger.info(f"✅ Sent premium expiring notification to user {user_telegram_id}")
+        except Exception as e:
+            logger.error(f"❌ Error sending premium expiring notification: {e}")
     
-    async def notify_premium_expiring(self, telegram_id: int, days_left: int):
-        """Notify user that premium subscription is expiring."""
-        message = (
-            f"⚠️ **Premium подписка заканчивается!**\n\n"
-            f"⏰ Осталось: {days_left} дней\n\n"
-            f"⭐ Продли сейчас, чтобы не потерять бонусы!"
-        )
-        return await self.send_notification(telegram_id, message)
-    
-    async def notify_event_started(self, telegram_id: int, event_name: str):
-        """Notify user about new event."""
-        message = (
-            f"🎉 **Новое событие!**\n\n"
-            f"🎯 {event_name}\n\n"
-            f"🎁 Зайди в бот, чтобы узнать подробности!"
-        )
-        return await self.send_notification(telegram_id, message)
-
-
-# Global notification service
-notification_service: Optional[NotificationService] = None
-
-
-async def init_notification_service(bot: Bot):
-    """Initialize notification service."""
-    global notification_service
-    notification_service = NotificationService(bot)
-    logger.info("✅ Notification service initialized")
-
-
-async def get_notification_service() -> NotificationService:
-    """Get notification service instance."""
-    if notification_service is None:
-        raise RuntimeError("Notification service not initialized")
-    return notification_service
+    async def send_event_notification(self, user_telegram_id: int, event_title: str, event_description: str):
+        """
+        Send notification about special event.
+        """
+        try:
+            text = (
+                f"🎉 **{event_title}**\n\n"
+                f"{event_description}"
+            )
+            await self.bot.send_message(
+                chat_id=user_telegram_id,
+                text=text,
+                parse_mode="markdown"
+            )
+            logger.info(f"✅ Sent event notification to user {user_telegram_id}: {event_title}")
+        except Exception as e:
+            logger.error(f"❌ Error sending event notification: {e}")
