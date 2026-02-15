@@ -107,12 +107,6 @@ async def setup_bot():
         logger.info("🔧 Setting up middlewares...")
         setup_middlewares()
         
-        # Initialize services
-        logger.info("🔧 Initializing services...")
-        from app.services.notifications import init_notification_service
-        await init_notification_service(bot)
-        logger.info("✅ Services initialized")
-        
         logger.info("🚀 Bot setup completed successfully!")
         
     except Exception as e:
