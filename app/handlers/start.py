@@ -101,24 +101,25 @@ async def cmd_start(message: Message):
             if is_new_user:
                 text = (
                     f"👋 **Добро пожаловать, {first_name}!**\n\n"
-                    f"🐻 Добро пожаловать в **BearsMoney** - игру, где медведи зарабатывают деньги!\n\n"
+                    f"🐻 Добро пожаловать в **BearsMoney** - увлекательную игру про коллекционирование медведей!\n\n"
                     f"🎁 **Стартовый бонус:** {user.coins:,.0f} Coins\n"
                 )
                 
                 if user.referred_by:
-                    text += f"\n🎉 +{REFERRAL_BONUS:,} Coins за регистрацию по реферальной ссылке!\n"
+                    text += f"\n🎉 +{REFERRAL_BONUS:,} Coins за регистрацию по приглашению друга!\n"
                 
                 text += (
-                    f"\n🚀 **Начни играть:**\n"
-                    f"• 🐻 Покупай медведей\n"
-                    f"• 💰 Зарабатывай Coins\n"
-                    f"• 💎 Обменивай на TON\n"
-                    f"• 👥 Приглашай друзей\n"
+                    f"\n🎮 **Что делать в игре:**\n"
+                    f"• 🐻 Собирай коллекцию уникальных медведей\n"
+                    f"• ⬆️ Прокачивай их и делай сильнее\n"
+                    f"• ⚔️ Сражайся с другими игроками\n"
+                    f"• 🎁 Получай ежедневные награды\n"
+                    f"• 👥 Играй с друзьями!\n"
                 )
                 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="📚 Пройти обучение", callback_data="tutorial")],
-                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
+                    [InlineKeyboardButton(text="🏠 Начать игру!", callback_data="main_menu")],
                 ])
             else:
                 # Returning user
@@ -162,27 +163,27 @@ async def main_menu(query: CallbackQuery):
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="🐻 Медведи", callback_data="bears"),
+                    InlineKeyboardButton(text="🐻 Мои медведи", callback_data="bears"),
                     InlineKeyboardButton(text="🛒 Магазин", callback_data="shop"),
                 ],
                 [
                     InlineKeyboardButton(text="🎲 Кейсы", callback_data="cases"),
-                    InlineKeyboardButton(text="💱 Обмен", callback_data="exchange"),
+                    InlineKeyboardButton(text="💎 Пополнить", callback_data="exchange"),
                 ],
                 [
-                    InlineKeyboardButton(text="🎉 Ежедневно", callback_data="daily_rewards"),
-                    InlineKeyboardButton(text="📺 Реклама", callback_data="watch_ad"),
+                    InlineKeyboardButton(text="🎁 Ежедневная награда", callback_data="daily_rewards"),
+                    InlineKeyboardButton(text="📺 Бонусы", callback_data="watch_ad"),
                 ],
                 [
                     InlineKeyboardButton(text="⭐ Premium", callback_data="premium"),
                     InlineKeyboardButton(text="🖼️ NFT", callback_data="nft_marketplace"),
                 ],
                 [
-                    InlineKeyboardButton(text="⚔️ PvP", callback_data="pvp_battles"),
+                    InlineKeyboardButton(text="⚔️ PvP Битвы", callback_data="pvp_battles"),
                     InlineKeyboardButton(text="🔧 Улучшения", callback_data="bear_upgrades"),
                 ],
                 [
-                    InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
+                    InlineKeyboardButton(text="👥 Пригласить друзей", callback_data="referrals"),
                     InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
                 ],
                 [
