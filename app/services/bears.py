@@ -325,7 +325,7 @@ class BearsService:
         if bear.level < MAX_BEAR_LEVEL:
             next_level_info = (
                 f"\n\n⬆️ Улучшить: {next_upgrade_cost} коинов\n"
-                f"💰 Доход увеличится: +{income_increase:.3f} коин/ч"
+                f"💪 Сила увеличится: +{income_increase:.3f} коин/ч"
             )
         else:
             next_level_info = f"\n\n⭐ Максимальный уровень!"
@@ -335,9 +335,9 @@ class BearsService:
             f"Класс: {bear_class['name']}\n"
             f"Вариант: {bear.variant}/15\n"
             f"Уровень: {bear.level}/{MAX_BEAR_LEVEL}\n"
-            f"💰 Основной доход: {stats['income']:.3f} коин/ч\n"
-            f"💰 Текущий доход: {bear.coins_per_hour:.3f} коин/ч\n"
-            f"📅 Доход в день: {bear.coins_per_day:.3f} коин\n"
+            f"💪 Базовая сила: {stats['income']:.3f} коин/ч\n"
+            f"💪 Текущая сила: {bear.coins_per_hour:.3f} коин/ч\n"
+            f"📅 Производство в день: {bear.coins_per_day:.3f} коин\n"
             f"Можно обменять на: {stats['sell']} коинов\n"
             f"Куплен: {bear.purchased_at.strftime('%d.%m.%Y')}"
             f"{next_level_info}"
@@ -355,7 +355,7 @@ class BearsService:
         return (
             f"{bear_class['color']} **№{bear_number}** {bear_class['emoji']} {bear.name}\n"
             f"Вариант: {bear.variant}/15 | Уровень: {bear.level}/{MAX_BEAR_LEVEL} | "
-            f"Доход: {bear.coins_per_hour:.2f}/ч | Обмен: {stats['sell']}"
+            f"Сила: {bear.coins_per_hour:.2f}/ч | Обмен: {stats['sell']}"
         )
     
     @staticmethod
