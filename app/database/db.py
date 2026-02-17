@@ -37,12 +37,9 @@ async def init_db():
     """
     try:
         logger.info("Initializing database...")
-        from app.models import (
-            user, bear, coin_transaction, withdrawal, subscription,
-            quest, user_quest, case_reward, user_case, channel_task,
-            user_achievement, user_daily_login, case_history, bear_insurance,
-            p2p_listing, case_guarantee, case_theme, bear_fusion
-        )
+        
+        # Import all models to register them with Base
+        from app.database import models
         
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
