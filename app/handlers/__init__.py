@@ -15,7 +15,8 @@ from . import (
     bear_upgrades,
     pvp,
     referral,
-    tutorial
+    tutorial,
+    upgrades
 )
 
 __all__ = [
@@ -34,5 +35,6 @@ __all__ = [
     'bear_upgrades',
     'pvp',
     'referral',
-    'tutorial'
+    'tutorial',
+    'upgrades'
 ]
