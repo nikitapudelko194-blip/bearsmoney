@@ -12,6 +12,49 @@ router = Router()
 
 TUTORIAL_REWARD = 500  # Coins for completing tutorial
 
+
+@router.callback_query(F.data == "tutorial")
+async def show_tutorial(query: CallbackQuery):
+    """Show tutorial overview with start button."""
+    try:
+        text = (
+            "📚 **Краткое обучение Bears Money**\n\n"
+            "🐻 **Медведи** - твои работники!\n"
+            "• Каждый медведь приносит Coins каждый час\n"
+            "• Есть 4 редкости: Common, Rare, Epic, Legendary\n"
+            "• Чем выше редкость - тем больше доход\n\n"
+            "💰 **Как зарабатывать?**\n"
+            "• 🐻 Собирай и прокачивай медведей\n"
+            "• 🎁 Получай ежедневные награды\n"
+            "• 👥 Приглашай друзей (бонусы за рефералов)\n"
+            "• 📺 Смотри рекламу за Coins\n"
+            "• ⚔️ Участвуй в PvP битвах\n\n"
+            "💎 **TON валюта**\n"
+            "• Обменивай Coins на настоящий TON\n"
+            "• Покупай Premium подписку\n"
+            "• Создавай NFT из своих медведей\n\n"
+            "🎯 **Главная цель**\n"
+            "Собери коллекцию медведей, зарабатывай Coins и обменивай их на TON!\n\n"
+            "💡 Нажми 'Начать игру' чтобы начать!\n"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎮 Начать игру!", callback_data="main_menu")],
+            [InlineKeyboardButton(text="📖 Подробное обучение", callback_data="tutorial_step_1")],
+        ])
+        
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+        except Exception:
+            await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+        
+        await query.answer()
+    
+    except Exception as e:
+        logger.error(f"❌ Error in show_tutorial: {e}", exc_info=True)
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
 # Tutorial steps
 TUTORIAL_STEPS = [
     {
@@ -26,7 +69,7 @@ TUTORIAL_STEPS = [
             "• Зарабатываешь Coins\n"
             "• Обмениваешь на TON\n"
             "• Соревнуешься с друзьями\n\n"
-            "💡 Нажми ‘Далее’, чтобы продолжить!"
+            "💡 Нажми 'Далее', чтобы продолжить!"
         ),
     },
     {
