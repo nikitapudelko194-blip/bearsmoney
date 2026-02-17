@@ -38,8 +38,8 @@ def setup_handlers():
             ads,
             bear_upgrades,
             pvp,
-            tutorial,
-            partnerships
+            referrals,
+            tutorial
         )
         
         # Register routers (order matters!)
@@ -57,7 +57,7 @@ def setup_handlers():
         dp.include_router(nft.router)
         dp.include_router(ads.router)
         dp.include_router(pvp.router)
-        dp.include_router(partnerships.router)
+        dp.include_router(referrals.router)
         dp.include_router(admin.router)  # Admin must be last
         
         logger.info("✅ All handlers registered successfully")
