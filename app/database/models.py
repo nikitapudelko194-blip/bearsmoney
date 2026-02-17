@@ -46,6 +46,7 @@ class User(Base):
     daily_logins = relationship('UserDailyLogin', back_populates='user')
     case_history = relationship('CaseHistory', back_populates='user')
     bear_insurance = relationship('BearInsurance', back_populates='user')
+    upgrades = relationship('UserUpgrade', back_populates='user')  # NEW: Upgrades
     # Fixed: Specify foreign_keys explicitly to avoid ambiguity
     p2p_listings_as_seller = relationship('P2PListing', back_populates='seller', foreign_keys='P2PListing.seller_id')
     p2p_listings_as_buyer = relationship('P2PListing', back_populates='buyer', foreign_keys='P2PListing.buyer_id')
@@ -88,7 +89,7 @@ class CoinTransaction(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     amount = Column(Float, nullable=False)
-    transaction_type = Column(String(50), nullable=False)  # 'earn', 'spend', 'quest_reward', 'referral', 'exchange_to_ton', 'exchange_from_ton'
+    transaction_type = Column(String(50), nullable=False)  # 'earn', 'spend', 'quest_reward', 'referral', 'exchange_to_ton', 'exchange_from_ton', 'upgrade'
     description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -353,3 +354,19 @@ class BearFusion(Base):
     status = Column(String(20), default='pending')  # 'pending', 'completed', 'failed'
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UserUpgrade(Base):
+    """Улучшения пользователя - постоянные бонусы к игре."""
+    __tablename__ = 'user_upgrades'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    upgrade_type = Column(String(50), nullable=False)  # 'bear_slots', 'income_multiplier', 'auto_collect', etc.
+    current_level = Column(Integer, default=0)  # Текущий уровень улучшения
+    max_level = Column(Integer, default=10)  # Максимальный уровень
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship('User', back_populates='upgrades')
