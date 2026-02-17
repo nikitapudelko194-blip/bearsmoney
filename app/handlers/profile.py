@@ -71,6 +71,11 @@ async def show_profile(query: CallbackQuery):
             transaction_result = await session.execute(transaction_query)
             total_earned = transaction_result.scalar() or 0
             
+            # Get referrals count
+            referrals_query = select(func.count(User.id)).where(User.referred_by == user.telegram_id)
+            referrals_result = await session.execute(referrals_query)
+            referrals_count = referrals_result.scalar() or 0
+            
             # Format text
             text = (
                 f"👤 **Профиль {query.from_user.first_name}**\n\n"
@@ -100,28 +105,42 @@ async def show_profile(query: CallbackQuery):
                 f"📅 Доход/день: {total_income_per_day:.1f} коинов\n"
                 f"📊 Средний уровень: {avg_level:.1f}\n"
                 f"🎯 Максимальный уровень: {max_level}/{MAX_BEAR_LEVEL}\n\n"
+            )
+            
+            # Add referral info
+            if referrals_count > 0:
+                referral_earnings = (
+                    (user.referral_earnings_tier1 or 0) +
+                    (user.referral_earnings_tier2 or 0) +
+                    (user.referral_earnings_tier3 or 0)
+                )
+                text += (
+                    f"👥 **Рефералы**\n"
+                    f"├ 👤 Приглашено: {referrals_count} чел\n"
+                    f"└ 💰 Заработано: {referral_earnings:,.0f} к\n\n"
+                )
+            
+            text += (
                 f"📅 **Аккаунт**\n"
-                f"📝 Создан: {user.created_at.strftime('%d.%m.%Y')}\n"
+                f"📋 Создан: {user.created_at.strftime('%d.%m.%Y')}\n"
                 f"🔄 Обновлен: {user.updated_at.strftime('%d.%m.%Y %H:%M')}\n"
             )
             
-            # Add referral info if exists
-            if user.referred_count > 0:
-                text += f"\n👥 **Рефереалы**\n"
-                text += f"👤 Приглашено: {user.referred_count} чел.\n"
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            keyboard = [
                 [InlineKeyboardButton(text="🐻 Мои медведи", callback_data="bears")],
                 [InlineKeyboardButton(text="💰 Финансы", callback_data="finance_stats")],
+                [InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals")],
                 [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")],
-            ])
+            ]
+            
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
             
             try:
-                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+                await query.message.edit_text(text, reply_markup=reply_markup, parse_mode="markdown")
             except Exception as e:
                 logger.warning(f"Could not edit message: {e}, sending new message instead")
-                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+                await query.message.answer(text, reply_markup=reply_markup, parse_mode="markdown")
             
             await query.answer()
     except Exception as e:
@@ -172,7 +191,7 @@ async def stats_menu(query: CallbackQuery):
                 f"├ 📦 Медведей: {total_bears}\n"
                 f"└ 💰 Доход: {sum(b.coins_per_day for b in bears):,.0f} к/день\n\n"
                 f"👥 **Рефералы**\n"
-                f"├ 👤 Приглашено: {tier1_count} чел.\n"
+                f"├ 👤 Приглашено: {tier1_count} чел\n"
                 f"└ 💸 Заработано: {total_ref_earnings:,.0f} коинов\n\n"
                 f"👉 Выберите категорию:"
             )
@@ -418,10 +437,10 @@ async def stats_cases(query: CallbackQuery):
         f"🎁 **Статистика кейсов**\n\n"
         f"🚧 Функция в разработке!\n\n"
         f"Здесь будет:\n"
-        f"- 📦 Количество открытых кейсов\n"
-        f"- 🎯 Награды и дропы\n"
-        f"- 📊 RTP (возврат)\n"
-        f"- 🏆 Лучшие дропы\n"
+        f"• 📦 Количество открытых кейсов\n"
+        f"• 🎯 Награды и дропы\n"
+        f"• 📊 RTP (возврат)\n"
+        f"• 🏆 Лучшие дропы\n"
     )
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -508,10 +527,10 @@ async def stats_achievements(query: CallbackQuery):
         f"🏆 **Достижения**\n\n"
         f"🚧 Функция в разработке!\n\n"
         f"Здесь будут:\n"
-        f"- ✅ Разблокированные\n"
-        f"- 🔒 Заблокированные\n"
-        f"- 🏆 Награды\n"
-        f"- 📈 Прогресс\n"
+        f"• ✅ Разблокированные\n"
+        f"• 🔒 Заблокированные\n"
+        f"• 🏆 Награды\n"
+        f"• 📈 Прогресс\n"
     )
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -600,7 +619,7 @@ async def finance_stats(query: CallbackQuery):
                 await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
             except Exception as e:
                 logger.warning(f"Could not edit message: {e}, sending new message instead")
-                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+                await query.message.answer(text, reply_markup=reply_markup, parse_mode="markdown")
             
             await query.answer()
     except Exception as e:
@@ -616,7 +635,7 @@ async def settings_menu(query: CallbackQuery):
     try:
         text = (
             f"⚙️ **Настройки**\n\n"
-            f"📝 Здесь вы сможете настраивать свой аккаунт\n\n"
+            f"📋 Здесь вы сможете настраивать свой аккаунт\n\n"
             f"🔧 **Доступные опции**:\n"
             f"• Язык интерфейса\n"
             f"• Уведомления\n"
