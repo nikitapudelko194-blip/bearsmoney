@@ -180,7 +180,7 @@ async def main_menu(query: CallbackQuery):
                 ],
                 [
                     InlineKeyboardButton(text="⚔️ PvP Битвы", callback_data="pvp_battles"),
-                    InlineKeyboardButton(text="🔧 Улучшения", callback_data="bear_upgrades"),
+                    InlineKeyboardButton(text="🚀 Улучшения", callback_data="upgrades"),
                 ],
                 [
                     InlineKeyboardButton(text="👥 Пригласить друзей", callback_data="referrals"),
@@ -201,3 +201,11 @@ async def main_menu(query: CallbackQuery):
     except Exception as e:
         logger.error(f"❌ Error in main_menu: {e}", exc_info=True)
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "start")
+async def start_callback(query: CallbackQuery):
+    """
+    Handle 'start' callback to return to main menu.
+    """
+    await main_menu(query)
