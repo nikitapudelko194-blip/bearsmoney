@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 # Ad rewards
-AD_REWARD_COINS = 100
+AD_REWARD_COINS = 50  # Changed from 100 to 50
 AD_DAILY_LIMIT = 10
 
 
@@ -133,7 +133,7 @@ async def do_watch_ad(query: CallbackQuery):
             except Exception:
                 await query.message.answer(text, reply_markup=reply_markup, parse_mode="markdown")
             
-            await query.answer("🎉 +100 Coins!")
+            await query.answer(f"🎉 +{AD_REWARD_COINS} Coins!")
             logger.info(f"✅ User {user.telegram_id} watched ad, earned {AD_REWARD_COINS} coins")
     
     except Exception as e:

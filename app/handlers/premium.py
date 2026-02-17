@@ -42,7 +42,7 @@ PREMIUM_TIERS = {
     },
     "vip": {
         "name": "👑 VIP",
-        "price": 0.5,  # 0.5 TON per month
+        "price": 1.0,  # 1.0 TON per month (was 0.5)
         "benefits": [
             "✅ Все медведи Premium",
             "🎁 +100% к доходу медведей",
@@ -123,11 +123,11 @@ async def premium_menu(query: CallbackQuery):
                     InlineKeyboardButton(text="⭐ Premium (0.1 TON/мес)", callback_data="buy_premium"),
                 ])
                 keyboard.append([
-                    InlineKeyboardButton(text="👑 VIP (0.5 TON/мес)", callback_data="buy_vip"),
+                    InlineKeyboardButton(text="👑 VIP (1.0 TON/мес)", callback_data="buy_vip"),
                 ])
             elif current_tier == "premium":
                 keyboard.append([
-                    InlineKeyboardButton(text="👑 Апгрейд до VIP (0.5 TON/мес)", callback_data="buy_vip"),
+                    InlineKeyboardButton(text="👑 Апгрейд до VIP (1.0 TON/мес)", callback_data="buy_vip"),
                 ])
                 keyboard.append([
                     InlineKeyboardButton(text="🔄 Продлить Premium", callback_data="buy_premium"),

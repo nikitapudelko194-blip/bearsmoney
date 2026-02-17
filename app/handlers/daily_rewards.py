@@ -13,38 +13,38 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 router = Router()
 
-# Daily rewards by day (increasing)
+# Daily rewards by day (starting at 50, +50 each day)
 DAILY_REWARDS = {
-    1: 100,
-    2: 150,
-    3: 200,
-    4: 250,
-    5: 300,
-    6: 400,
-    7: 500,   # Week bonus
-    8: 300,
-    9: 350,
-    10: 400,
-    11: 450,
-    12: 500,
-    13: 600,
-    14: 1000,  # 2 weeks bonus
-    15: 500,
-    16: 550,
-    17: 600,
-    18: 650,
-    19: 700,
-    20: 800,
-    21: 1500,  # 3 weeks bonus
-    22: 700,
-    23: 750,
-    24: 800,
-    25: 850,
-    26: 900,
-    27: 1000,
-    28: 1200,
-    29: 1500,
-    30: 3000,  # Month bonus!
+    1: 50,
+    2: 100,
+    3: 150,
+    4: 200,
+    5: 250,
+    6: 300,
+    7: 350,   # Week bonus
+    8: 400,
+    9: 450,
+    10: 500,
+    11: 550,
+    12: 600,
+    13: 650,
+    14: 700,  # 2 weeks bonus
+    15: 750,
+    16: 800,
+    17: 850,
+    18: 900,
+    19: 950,
+    20: 1000,
+    21: 1050,  # 3 weeks bonus
+    22: 1100,
+    23: 1150,
+    24: 1200,
+    25: 1250,
+    26: 1300,
+    27: 1350,
+    28: 1400,
+    29: 1450,
+    30: 1500,  # Month bonus!
 }
 
 # Fortune wheel prizes
@@ -154,7 +154,7 @@ async def daily_rewards_menu(query: CallbackQuery):
             
             # Get reward for current day
             current_day = daily_login.streak_days
-            reward = DAILY_REWARDS.get(current_day, 100)
+            reward = DAILY_REWARDS.get(current_day, 50)
             
             # Calculate next milestone
             milestones = [7, 14, 21, 30]
@@ -237,7 +237,7 @@ async def claim_daily_reward(query: CallbackQuery):
             
             # Get reward
             current_day = daily_login.streak_days
-            reward = DAILY_REWARDS.get(current_day, 100)
+            reward = DAILY_REWARDS.get(current_day, 50)
             
             # Add coins
             user.coins += reward
