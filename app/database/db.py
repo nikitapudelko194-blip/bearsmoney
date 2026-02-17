@@ -1,5 +1,6 @@
 """Database initialization and session management."""
 import logging
+from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from config import settings
@@ -50,15 +51,21 @@ async def init_db():
         raise
 
 
-async def get_session() -> AsyncSession:
+@asynccontextmanager
+async def get_session():
     """
-    Get database session.
+    Get database session as async context manager.
+    Usage: async with get_session() as session:
     """
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    session = AsyncSessionLocal()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
 
 
 async def close_db():
