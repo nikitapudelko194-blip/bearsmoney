@@ -7,18 +7,19 @@ from sqlalchemy import select
 from app.database.db import get_session
 from app.database.models import User, CoinTransaction
 from datetime import datetime
+from app.bot import bot
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-REFERRAL_BONUS = 500  # Bonus for both referrer and referred user
+REFERRAL_BONUS = 100  # Bonus for both referrer and referred user
 
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     """
     Handle /start command with referral support.
-    Format: /start or /start ref_123456
+    Format: /start or /start ref123456
     """
     try:
         user_id = message.from_user.id
@@ -26,11 +27,11 @@ async def cmd_start(message: Message):
         first_name = message.from_user.first_name
         
         # Extract referral code if present
-        referrer_id = None
+        referrer_telegram_id = None
         args = message.text.split()
-        if len(args) > 1 and args[1].startswith('ref_'):
+        if len(args) > 1 and args[1].startswith('ref'):
             try:
-                referrer_id = int(args[1].replace('ref_', ''))
+                referrer_telegram_id = int(args[1].replace('ref', ''))
             except ValueError:
                 logger.warning(f"⚠️ Invalid referral code: {args[1]}")
         
@@ -41,6 +42,7 @@ async def cmd_start(message: Message):
             user = result.scalar_one_or_none()
             
             is_new_user = False
+            referrer_notified = False
             
             if not user:
                 # Create new user
@@ -55,15 +57,15 @@ async def cmd_start(message: Message):
                 )
                 
                 # Process referral if present
-                if referrer_id and referrer_id != user_id:
-                    # Find referrer
-                    referrer_query = select(User).where(User.telegram_id == referrer_id)
+                if referrer_telegram_id and referrer_telegram_id != user_id:
+                    # Find referrer by telegram_id
+                    referrer_query = select(User).where(User.telegram_id == referrer_telegram_id)
                     referrer_result = await session.execute(referrer_query)
                     referrer = referrer_result.scalar_one_or_none()
                     
                     if referrer:
-                        # Set referral relationship
-                        user.referred_by = referrer_id
+                        # Set referral relationship (save referrer's DB id, not telegram_id)
+                        user.referred_by = referrer.id
                         
                         # Give bonus to referrer
                         referrer.coins += REFERRAL_BONUS
@@ -72,6 +74,10 @@ async def cmd_start(message: Message):
                         
                         # Give bonus to new user
                         user.coins += REFERRAL_BONUS
+                        
+                        # Save user first to get ID
+                        session.add(user)
+                        await session.flush()  # Get user.id before creating transactions
                         
                         # Log transactions
                         session.add(CoinTransaction(
@@ -88,11 +94,40 @@ async def cmd_start(message: Message):
                             description=f'Бонус за регистрацию по реферальной ссылке'
                         ))
                         
-                        logger.info(f"✅ Referral: {referrer_id} invited {user_id}")
-                
-                session.add(user)
-                await session.commit()
-                await session.refresh(user)
+                        await session.commit()
+                        await session.refresh(user)
+                        await session.refresh(referrer)
+                        
+                        logger.info(f"✅ Referral: {referrer_telegram_id} invited {user_id}")
+                        
+                        # Send notification to referrer
+                        try:
+                            referrer_username = f"@{username}" if username else first_name or f"ID: {user_id}"
+                            notification_text = (
+                                f"🎉 <b>Новый реферал!</b>\n\n"
+                                f"👤 Пользователь <b>{referrer_username}</b> перешёл по вашей ссылке!\n"
+                                f"💰 Вы получили: <b>+{REFERRAL_BONUS} Coins</b>\n\n"
+                                f"💼 Ваш баланс: <b>{referrer.coins:,.0f} Coins</b>\n"
+                                f"👥 Всего рефералов: <b>{referrer.referred_count}</b>"
+                            )
+                            
+                            await bot.send_message(
+                                chat_id=referrer.telegram_id,
+                                text=notification_text,
+                                parse_mode="HTML"
+                            )
+                            referrer_notified = True
+                        except Exception as e:
+                            logger.warning(f"⚠️ Could not send notification to referrer {referrer_telegram_id}: {e}")
+                    else:
+                        logger.warning(f"⚠️ Referrer {referrer_telegram_id} not found")
+                        session.add(user)
+                        await session.commit()
+                        await session.refresh(user)
+                else:
+                    session.add(user)
+                    await session.commit()
+                    await session.refresh(user)
                 
                 is_new_user = True
                 logger.info(f"✅ New user registered: {user_id} (@{username})")
@@ -100,16 +135,16 @@ async def cmd_start(message: Message):
             # Welcome message
             if is_new_user:
                 text = (
-                    f"👋 **Добро пожаловать, {first_name}!**\n\n"
-                    f"🐻 Добро пожаловать в **BearsMoney** - увлекательную игру про коллекционирование медведей!\n\n"
-                    f"🎁 **Стартовый бонус:** {user.coins:,.0f} Coins\n"
+                    f"👋 <b>Добро пожаловать, {first_name}!</b>\n\n"
+                    f"🐻 Добро пожаловать в <b>BearsMoney</b> - увлекательную игру про коллекционирование медведей!\n\n"
+                    f"🎁 <b>Стартовый бонус:</b> {user.coins:,.0f} Coins\n"
                 )
                 
                 if user.referred_by:
                     text += f"\n🎉 +{REFERRAL_BONUS:,} Coins за регистрацию по приглашению друга!\n"
                 
                 text += (
-                    f"\n🎮 **Что делать в игре:**\n"
+                    f"\n🎮 <b>Что делать в игре:</b>\n"
                     f"• 🐻 Собирай коллекцию уникальных медведей\n"
                     f"• ⬆️ Прокачивай их и делай сильнее\n"
                     f"• ⚔️ Сражайся с другими игроками\n"
@@ -124,7 +159,7 @@ async def cmd_start(message: Message):
             else:
                 # Returning user
                 text = (
-                    f"👋 **С возвращением, {first_name}!**\n\n"
+                    f"👋 <b>С возвращением, {first_name}!</b>\n\n"
                     f"💼 Баланс: {user.coins:,.0f} Coins\n"
                     f"💎 TON: {float(user.ton_balance):.4f}\n"
                 )
@@ -133,7 +168,7 @@ async def cmd_start(message: Message):
                     [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
                 ])
             
-            await message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
     
     except Exception as e:
         logger.error(f"❌ Error in cmd_start: {e}", exc_info=True)
@@ -154,7 +189,7 @@ async def main_menu(query: CallbackQuery):
             user = user_result.scalar_one()
             
             text = (
-                f"🏠 **Главное меню**\n\n"
+                f"🏠 <b>Главное меню</b>\n\n"
                 f"👤 {query.from_user.first_name}\n"
                 f"💼 Баланс: {user.coins:,.0f} Coins\n"
                 f"💎 TON: {float(user.ton_balance):.4f}\n"
@@ -192,9 +227,9 @@ async def main_menu(query: CallbackQuery):
             ])
             
             try:
-                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="markdown")
+                await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
             except Exception:
-                await query.message.answer(text, reply_markup=keyboard, parse_mode="markdown")
+                await query.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
             
             await query.answer()
     
