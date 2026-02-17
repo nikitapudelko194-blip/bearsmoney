@@ -164,7 +164,7 @@ async def main_menu(query: CallbackQuery):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text="🐻 Мои медведи", callback_data="bears"),
-                    InlineKeyboardButton(text="🛒 Магазин", callback_data="shop"),
+                    InlineKeyboardButton(text="🛍️ Магазин", callback_data="shop"),
                 ],
                 [
                     InlineKeyboardButton(text="🎲 Кейсы", callback_data="cases"),
@@ -188,7 +188,6 @@ async def main_menu(query: CallbackQuery):
                 ],
                 [
                     InlineKeyboardButton(text="📚 Обучение", callback_data="tutorial"),
-                    InlineKeyboardButton(text="🤝 Партнёры", callback_data="partnerships"),
                 ],
             ])
             
